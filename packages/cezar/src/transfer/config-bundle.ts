@@ -50,6 +50,7 @@ export const WORKSPACE_EXCLUDED: Record<string, string> = {
   telemetry: 'consent is per machine and never granted by a file',
   lastActiveOn: 'telemetry bookkeeping',
   projects: 'absolute repo paths',
+  projectGraph: 'links and focus use machine-local registered project IDs, which cannot be imported into another host without explicit verified remapping',
   relayAddress: 'phones are paired through this machine\'s relay',
 };
 

@@ -73,6 +73,32 @@ const workspaceProjectSchema = z
 export type WorkspaceProject = z.infer<typeof workspaceProjectSchema>;
 
 /**
+ * Optional project dependency graph over workspace registration IDs.
+ * A relation is child/consumer -> parent/prerequisite for the first three types.
+ * A provides-feature relation is provider -> consumer and is reversed for scheduling.
+ * Unknown future fields survive config merge-writes; malformed links are salvaged per entry.
+ */
+const projectRelationSchema = z
+  .object({
+    from: z.string().regex(PROJECT_ID_RE),
+    to: z.string().regex(PROJECT_ID_RE),
+    type: z.enum(['part-of', 'built-on', 'depends-on', 'provides-feature']),
+  })
+  .passthrough();
+
+export type ProjectRelation = z.infer<typeof projectRelationSchema>;
+
+const projectGraphSchema = z.object({
+  focusProjectId: z.string().regex(PROJECT_ID_RE).optional().catch(undefined),
+  links: z.array(z.unknown()).default(() => []).catch(() => [])
+    .transform((entries) => entries.flatMap((entry) => {
+      const parsed = projectRelationSchema.safeParse(entry);
+      return parsed.success ? [parsed.data] : [];
+    })),
+}).passthrough();
+
+
+/**
  * Zero-config cadence, in minutes, for re-checking a run parked with
  * `CEZ:MONITORING` (#810). The single source of truth for that default — the
  * schema below and `WorkspaceSemaphore`'s fallback both read it, so an install
@@ -287,6 +313,8 @@ export const workspaceConfigSchema = z
     disabledProviders: disabledProvidersSchema,
     /** Machine-wide agent/model defaults for repos that set none of their own. */
     agentDefaults: agentDefaultsSchema.default(() => ({})).catch(() => ({})),
+    /** Optional graph. No default object is written for users who never configured relationships. */
+    projectGraph: projectGraphSchema.optional().catch(undefined),
     /** Per-entry salvage: a corrupt entry is dropped, the rest of the registry
      *  survives (a whole-array `.catch([])` would evict every project over one
      *  bad row). */

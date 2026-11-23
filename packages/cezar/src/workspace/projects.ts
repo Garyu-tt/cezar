@@ -367,6 +367,14 @@ export async function removeProject(id: string): Promise<boolean> {
     const next = config.projects.filter((p) => p.id !== id);
     removed = next.length !== config.projects.length;
     config.projects = next;
+    // A removed checkout must not remain an execution prerequisite. Strip its
+    // graph edges in the SAME atomic registry write, never touch repo files.
+    if (removed && config.projectGraph) {
+      config.projectGraph.links = config.projectGraph.links.filter(
+        (link) => link.from !== id && link.to !== id,
+      );
+      if (config.projectGraph.focusProjectId === id) delete config.projectGraph.focusProjectId;
+    }
   });
   return removed;
 }
