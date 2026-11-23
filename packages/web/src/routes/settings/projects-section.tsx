@@ -31,6 +31,7 @@ import { allProjectTags, suggestTags } from '@/lib/project-tags'
 import { cn } from '@/lib/utils'
 import { CardNote, FormRow, SettingsCard, isCommitKey, useSavedFlash } from './form-row'
 import { RemoveProjectDialog, useProjectRemoval } from './remove-project'
+import { ProjectLinksEditor } from './project-links-editor'
 
 /**
  * Settings → Projects (multi-project spec, step 4.4; design doc Proposal 8): the two things
@@ -280,6 +281,7 @@ function RegistryTable({ registry, workspaceMax }: { registry: ProjectsResponse;
                 <ProjectRow
                   key={project.id}
                   project={project}
+                  projects={registry.projects}
                   isBoot={project.id === registry.bootProject}
                   workspaceMax={workspaceMax}
                   vocabulary={vocabulary}
@@ -312,6 +314,7 @@ function RegistryTable({ registry, workspaceMax }: { registry: ProjectsResponse;
 
 function ProjectRow({
   project,
+  projects,
   isBoot,
   workspaceMax,
   vocabulary,
@@ -319,6 +322,7 @@ function ProjectRow({
   onRemove,
 }: {
   project: ProjectListEntry
+  projects: ProjectListEntry[]
   isBoot: boolean
   workspaceMax: number
   vocabulary: readonly string[]
@@ -375,6 +379,7 @@ function ProjectRow({
         {project.unregistered ? '—' : shortDate(project.addedAt)}
       </td>
       <td className="px-3 py-2 text-right whitespace-nowrap">
+        {!project.unregistered ? <ProjectLinksEditor project={project} projects={projects} /> : null}
         {/* Into the project's own settings (unified settings, spec 2026-10-13). An EXPLICIT
             `/p/<id>` path — this pane renders outside every project scope, so the scoped Link
             would have nothing to prefix with. Neither a missing project (its panes all 409) nor

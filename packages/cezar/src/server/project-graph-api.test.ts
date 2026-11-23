@@ -80,11 +80,31 @@ describe('workspace project graph API', () => {
     expect((await loadWorkspaceConfig()).projectGraph?.links).toEqual([one]);
   });
 
+
+  it('resolves a remote catalog read-only, leaving unregistered GitHub repos unavailable', async () => {
+    await register('mojum');
+    const app = api();
+    const good = await request(app, 'POST', '/workspace/project-graph/catalog-bindings', {
+      repositories: ['Garyu-tt/mojum', 'Garyu-tt/GenesisPE'],
+    });
+    expect(good.status).toBe(200);
+    expect(await good.json()).toEqual({
+      bindings: [],
+      unregistered: ['Garyu-tt/mojum', 'Garyu-tt/GenesisPE'],
+      ambiguous: [],
+    });
+    expect((await loadWorkspaceConfig()).projectGraph).toBeUndefined();
+    expect((await request(app, 'POST', '/workspace/project-graph/catalog-bindings',
+      { repositories: ['../../bad'] })).status).toBe(400);
+  });
+
   it('refuses all inspection and mutations without writing in single-project mode', async () => {
     await register('one');
     await register('two');
     const restricted = createProjectGraphRoutes(() => true);
     expect((await restricted.request('/workspace/project-graph')).status).toBe(409);
+    expect((await request(restricted, 'POST', '/workspace/project-graph/catalog-bindings',
+      { repositories: ['Garyu-tt/mojum'] })).status).toBe(409);
     expect((await request(restricted, 'POST', '/workspace/project-graph/links',
       { from: 'one', to: 'two', type: 'depends-on' })).status).toBe(409);
     expect((await request(restricted, 'PUT', '/workspace/project-graph/focus',

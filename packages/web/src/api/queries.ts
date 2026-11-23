@@ -2,6 +2,8 @@ import { hashKey, useInfiniteQuery, useMutation, useQueries, useQuery, useQueryC
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 
 import { mergeProviderStatusResponse } from '@/lib/provider-status'
+import type { NativeProjectGraph } from '@open-mercato/cezar-api-client'
+import type { NativeProjectLinkInput } from './client'
 import { mergeRun } from './events'
 
 import {
@@ -47,6 +49,10 @@ import {
   getProjectRun,
   getProjectRuns,
   getProjects,
+  getNativeProjectGraph,
+  setNativeProjectFocus,
+  addNativeProjectLink,
+  removeNativeProjectLink,
   getRunnerModels,
   getRepo,
   getRunCommit,
@@ -470,6 +476,7 @@ export const workspaceQueryKeys = {
   providerStatus: ['workspace', 'providers', 'status'] as const,
   agentSetup: ['workspace', 'providers', 'setup'] as const,
   projects: ['workspace', 'projects'] as const,
+  projectGraph: ['workspace', 'project-graph'] as const,
   /** `GET /api/projects/github-owners` — the new-project dialog's owner picker. */
   githubOwners: ['workspace', 'github-owners'] as const,
   /** `POST/GET/DELETE /api/v1/github/login` — the device flow cezar runs for the user. */
@@ -681,6 +688,35 @@ export function useRetryProviderAuth() {
 /** The workspace project registry (`GET /api/projects`): the `/p/:projectId` route gate's
  *  known/unknown answer, the boot slug behind the `/p/default` alias, and the list the
  *  unknown-project screen offers. Step 3.3's sidebar reads it too. */
+/** Workspace-wide registered-repository relationships (not /p/:projectId scoped). */
+export function useNativeProjectGraph(enabled = true) {
+  return useQuery({
+    queryKey: workspaceQueryKeys.projectGraph,
+    queryFn: ({ signal }) => getNativeProjectGraph({ signal }),
+    enabled,
+    retry: false,
+  })
+}
+
+export function useSetNativeProjectFocus() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: (projectId: string | null) => setNativeProjectFocus(projectId),
+    retry: false,
+    onSuccess: (graph) => client.setQueryData<NativeProjectGraph>(workspaceQueryKeys.projectGraph, graph),
+  })
+}
+
+export function useNativeProjectLinkMutation() {
+  const client = useQueryClient()
+  return useMutation({
+    mutationFn: ({ operation, link }: { operation: 'add' | 'remove'; link: NativeProjectLinkInput }) =>
+      operation === 'add' ? addNativeProjectLink(link) : removeNativeProjectLink(link),
+    retry: false,
+    onSuccess: (graph) => client.setQueryData<NativeProjectGraph>(workspaceQueryKeys.projectGraph, graph),
+  })
+}
+
 export function useProjects() {
   return useQuery({
     queryKey: workspaceQueryKeys.projects,
@@ -754,6 +790,7 @@ export function useRemoveProject() {
     retry: false,
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.projects })
+      void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.projectGraph })
     },
   })
 }
