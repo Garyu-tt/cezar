@@ -113,6 +113,9 @@ Consumed by the bundled React cockpit (`packages/cezar/web/dist`, shipped in loc
 
 What is protected now: **the shape of each route under `/api/v1`**, the three-way scope aliasing, and the SSE event vocabulary. Removing or renaming a route, or changing a response shape, is breaking exactly as before. Routes:
 
+- Native dynamic agent pool (additive, project-scoped): `GET /api/v1/agent-pool`, `PUT /api/v1/agent-pool` and `POST /api/v1/agent-pool/jobs` expose dynamic logical capacity, admission and native Cezar RunManager run IDs. They do not add a separate execution engine or override the workspace semaphore. Project-scoped aliases preserve the same contracts.
+- Native dependency-wave planner (additive, workspace-level): `GET /api/v1/workspace/project-graph/plan` is a read-only preview for registered checkouts. A ready wave is not an execution permit or proof of idle physical inference slots.
+
 - Static/GUI: `GET /` and every SPA shell route, `/new` (bookmarklet deep-link, query `?skill=&ref=&auto=&key=`), `/assets/:file`, `/icon.svg` (canonical brand mark / favicon; `/open-mercato.svg` remains as a compatibility alias serving the same bytes), `/manifest.webmanifest`, `/apple-touch-icon.png`, `/icon-192.png`, `/icon-512.png`, `/icon-maskable-512.png` (installable cockpit, #1762)
 - Meta: `GET /api/v1/health` (the **only** CORS-open route — bookmarklets probe it cross-origin; its shape `{version, latestVersion, repoRoot, repo, checks, defaultRunner}` is the most externally-depended-on JSON in the app), `GET /api/v1/launch-key`
   - `version` is a display string: a server running from a source checkout (including one linked into `~/.cezar/versions/`) answers `<release>-dev` (#1530). Update decisions compare the raw version server-side; a consumer comparing `version` as semver must read `X-dev` as release `X` (the desktop shell does since #1530; older shells may offer a spurious update to a linked checkout, and only act on a click).
