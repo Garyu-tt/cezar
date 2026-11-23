@@ -15,6 +15,8 @@ import {
   unlinkRegisteredProjects,
 } from '../workspace/project-graph.ts';
 import { PROJECT_ID_RE } from '../workspace/config.ts';
+import { listProjects } from '../workspace/projects.ts';
+import { resolveGitHubCatalog } from '../workspace/project-catalog-bindings.ts';
 
 const id = z.string().regex(PROJECT_ID_RE);
 const focusInput = z.object({ projectId: id.nullable() });
@@ -22,6 +24,10 @@ const linkInput = z.object({
   from: id,
   to: id,
   type: z.enum(PROJECT_RELATION_TYPES),
+});
+
+const catalogInput = z.object({
+  repositories: z.array(z.string().regex(/^[a-zA-Z0-9_.-]+\\/[a-zA-Z0-9_.-]+$/)).max(1000),
 });
 
 export function createProjectGraphRoutes(singleProject: () => boolean) {
@@ -33,6 +39,18 @@ export function createProjectGraphRoutes(singleProject: () => boolean) {
   };
 
   return new Hono()
+    // Pure verification: the caller supplies catalog IDs, the server matches ONLY
+    // parsed origin remotes already registered in Cezar. No clone, GitHub API or write.
+    .post('/workspace/project-graph/catalog-bindings', async (c) => {
+      if (singleProject()) return c.json(refuses(), 409);
+      const input = catalogInput.safeParse(await c.req.json().catch(() => null));
+      if (!input.success) return c.json({ error: 'invalid GitHub catalog' }, 400);
+      try {
+        return c.json(resolveGitHubCatalog(input.data.repositories, await listProjects()), 200);
+      } catch (error) {
+        return c.json(failure(error), 500);
+      }
+    })
     .get('/workspace/project-graph', async (c) => {
       if (singleProject()) return c.json(refuses(), 409);
       try {
