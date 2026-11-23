@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -120,12 +121,67 @@ describe('workspace project graph API', () => {
     expect((await loadWorkspaceConfig()).projectGraph).toEqual(before.projectGraph);
   });
 
+  it('previews routing to a real registered dependency without creating a pool job', async () => {
+    await register('mojum');
+    await register('foundation');
+    await register('independent');
+    for (const name of ['mojum', 'foundation', 'independent']) {
+      execFileSync('git', ['init', '-q', '-b', 'main'], { cwd: join(root, name) });
+    }
+    const app = api();
+    expect((await request(app, 'POST', '/workspace/project-graph/links', {
+      from: 'mojum', to: 'foundation', type: 'depends-on',
+    })).status).toBe(200);
+    const before = await loadWorkspaceConfig();
+    const res = await request(app, 'POST', '/workspace/project-graph/routing-preview', {
+      logicalProjectId: 'mojum', executionProjectId: 'foundation',
+    });
+    expect(res.status).toBe(200);
+    const routing = await res.json();
+    expect(routing).toMatchObject({
+      logicalProjectId: 'mojum', executionProjectId: 'foundation',
+      eligible: true, reason: 'ready', previewOnly: true,
+      nativePoolEndpoint: '/api/v1/p/foundation/agent-pool/jobs',
+    });
+    expect(JSON.stringify(routing)).not.toContain(root);
+    expect((await loadWorkspaceConfig()).projectGraph).toEqual(before.projectGraph);
+
+    const unrelated = await request(app, 'POST', '/workspace/project-graph/routing-preview', {
+      logicalProjectId: 'mojum', executionProjectId: 'independent',
+    });
+    expect(unrelated.status).toBe(200);
+    expect(await unrelated.json()).toMatchObject({
+      eligible: false, reason: 'outside-logical-scope', nativePoolEndpoint: null,
+    });
+    expect((await request(app, 'POST', '/workspace/project-graph/routing-preview', {
+      logicalProjectId: 'mojum', executionProjectId: 'missing',
+    })).status).toBe(200);
+    expect((await request(app, 'POST', '/workspace/project-graph/routing-preview', {
+      logicalProjectId: '../../../etc/passwd', executionProjectId: 'mojum',
+    })).status).toBe(400);
+  });
+
+  it('does not suggest native execution for a registered but non-git checkout', async () => {
+    await register('mojum');
+    const res = await request(api(), 'POST', '/workspace/project-graph/routing-preview', {
+      logicalProjectId: 'mojum', executionProjectId: 'mojum',
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      eligible: false, reason: 'execution-blocked', blockedReason: 'not-git',
+      nativePoolEndpoint: null,
+    });
+  });
+
   it('refuses all inspection and mutations without writing in single-project mode', async () => {
     await register('one');
     await register('two');
     const restricted = createProjectGraphRoutes(() => true);
     expect((await restricted.request('/workspace/project-graph')).status).toBe(409);
     expect((await restricted.request('/workspace/project-graph/plan')).status).toBe(409);
+    expect((await request(restricted, 'POST', '/workspace/project-graph/routing-preview', {
+      logicalProjectId: 'one', executionProjectId: 'two',
+    })).status).toBe(409);
     expect((await request(restricted, 'POST', '/workspace/project-graph/catalog-bindings',
       { repositories: ['Garyu-tt/mojum'] })).status).toBe(409);
     expect((await request(restricted, 'POST', '/workspace/project-graph/links',
