@@ -250,7 +250,7 @@ async function load(path) {
 async function atomicSave(path, value) {
   const temp = join(dirname(path), '.ecosystem-' + randomUUID() + '.tmp')
   try {
-    await writeFile(temp, JSON.stringify(value, null, 2) + '\\n', { mode: 0o600, flag: 'wx' })
+    await writeFile(temp, JSON.stringify(value, null, 2) + '\n', { mode: 0o600, flag: 'wx' })
     await rename(temp, path)
   } finally {
     await rm(temp, { force: true }).catch(() => undefined)
