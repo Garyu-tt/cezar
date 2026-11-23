@@ -39,6 +39,21 @@ beforeEach(() => {
         previewOnly: true,
       })
     }
+    if (path === '/api/v1/workspace/project-graph/routing-preview' && method === 'POST') {
+      const executionProjectId = String(body?.executionProjectId ?? '')
+      const eligible = executionProjectId === 'adamantium-node'
+      return result({
+        logicalProjectId: body?.logicalProjectId,
+        executionProjectId,
+        eligible,
+        reason: eligible ? 'ready' : 'outside-logical-scope',
+        nativePoolEndpoint: eligible ? '/api/v1/p/adamantium-node/agent-pool/jobs' : null,
+        blockedReason: null,
+        blockedBy: [],
+        logicalScope: ['mojum', 'adamantium-node'],
+        previewOnly: true,
+      })
+    }
     if (path === '/api/v1/workspace/project-graph/focus' && method === 'PUT') {
       graph = { ...graph, focusProjectId: body?.projectId as string, explicitFocusProjectId: body?.projectId as string }
       return result(graph)
@@ -102,6 +117,28 @@ describe('existing row project graph popover', () => {
     expect(await screen.findByText(/3 ready in 1 wave/)).not.toBeNull()
     expect(screen.getByText(/Wave 1:/)).not.toBeNull()
     expect(requests.filter((item) => item.url.includes('/runs') || item.url.includes('/checkout'))).toEqual([])
+  })
+
+  it('checks explicit execution targets without dispatching jobs and hides stale answers', async () => {
+    showEditor()
+    const target = await screen.findByLabelText('Target project') as HTMLSelectElement
+    const check = screen.getByRole('button', { name: 'Check' })
+    expect((check as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.change(target, { target: { value: 'adamantium-node' } })
+    fireEvent.click(check)
+    await waitFor(() => expect(requests).toContainEqual({
+      method: 'POST',
+      url: '/api/v1/workspace/project-graph/routing-preview',
+      body: { logicalProjectId: 'mojum', executionProjectId: 'adamantium-node' },
+    }))
+    expect(await screen.findByText(/Target is eligible for planning/)).not.toBeNull()
+    expect(requests.some((item) => item.url.includes('/agent-pool/jobs'))).toBe(false)
+
+    fireEvent.change(target, { target: { value: 'adamantiumtoolbox' } })
+    expect(screen.queryByText(/Target is eligible for planning/)).toBeNull()
+    fireEvent.click(check)
+    expect(await screen.findByText(/Target unavailable: outside-logical-scope/)).not.toBeNull()
+    expect(requests.some((item) => item.url.includes('/agent-pool/jobs'))).toBe(false)
   })
 
   it('refuses to invent a local execution project for remote/unregistered targets', async () => {
