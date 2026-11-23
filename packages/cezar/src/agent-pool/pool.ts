@@ -206,8 +206,10 @@ export class NativeAgentPool {
   }
 
   private async pumpUnsafe(): Promise<void> {
-    const resourceCap = this.capacity();
-    const limit = Math.min(this.state.desired, resourceCap);
+    // Native RunManager owns the physical semaphore. Submit native QUEUED
+    // runs up to the logical target so every agent is visible in Cezar Tasks.
+    // Only the native workspace semaphore controls actual execution.
+    const limit = this.state.desired;
     if (limit <= 0) return;
     const runs = new Map(this.ports.listRuns().map((run) => [run.id, run]));
     const occupied = new Set<number>();

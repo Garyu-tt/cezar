@@ -28,6 +28,11 @@ with different content is rejected. The total private backlog is limited to
 an existing Cezar workflow or its Automation engine; there is no second model
 gateway, HTTP server, browser widget or persistent agent process.
 
+The pool schedules up to the desired number of native Cezar runs immediately.
+When resource capacity is smaller, the native workspace semaphore keeps the
+excess runs queued, visible in Cezar Tasks. No separate hidden worker queue
+is introduced. Native queued runs are not live LLM inference requests.
+
 Weighted model routing (explicit opt-in): PUT /agent-pool may also supply
 a models array of 1..64 native runner model IDs, for example:
 {"desired":17,"models":["provider/a","provider/a","provider/b"]}.
@@ -50,10 +55,11 @@ Unconfirmed partial launches remain `uncertain` for operator inspection.
 
 `desired=17` requests 17 **native agent tasks** in flight, not 17
 independent model processes or 17 guaranteed simultaneous token streams.
-The actual admission limit is
-`min(desired, workspace.resources.maxParallel, project.maxParallel?)`,
-and Cezar still enforces provider/auth/worktree policies. Native tasks may
-remain `queued` if a separate provider is saturated.
+The actual native EXECUTION limit is
+`min(desired, workspace.resources.maxParallel)`, while up to the entire
+requested logical pool appears immediately as native Cezar queued or active
+runs. Cezar still enforces provider/auth/worktree policies; a native run may
+remain queued even if its model backend has additional saturation.
 
 This fork lifts the *configurable* Cezar parallel ceiling from 16 to 500
 without changing the safe default of **2**. Increasing the resource ceiling
