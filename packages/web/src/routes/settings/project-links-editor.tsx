@@ -5,6 +5,7 @@ import type { ProjectListEntry, NativeProjectLink } from '@open-mercato/cezar-ap
 import {
   useNativeProjectGraph,
   useNativeProjectPlan,
+  useNativeProjectRoutingPreview,
   useNativeProjectLinkMutation,
   useSetNativeProjectFocus,
 } from '@/api/queries'
@@ -38,9 +39,11 @@ export function ProjectLinksEditor({
 }) {
   const [open, setOpen] = useState(false)
   const [target, setTarget] = useState('')
+  const [checkedExecutionId, setCheckedExecutionId] = useState<string | null>(null)
   const [type, setType] = useState<RelationType>('depends-on')
   const graph = useNativeProjectGraph(open)
   const plan = useNativeProjectPlan(open)
+  const routing = useNativeProjectRoutingPreview()
   const focus = useSetNativeProjectFocus()
   const links = useNativeProjectLinkMutation()
   const peers = projects.filter((entry) => entry.id !== project.id && !entry.unregistered)
@@ -53,13 +56,14 @@ export function ProjectLinksEditor({
   const addLink = () => {
     if (!target || busy) return
     links.mutate({ operation: 'add', link: { from: project.id, to: target, type } }, {
-      onSuccess: () => { setTarget(''); toast('Project relationship saved') },
+      onSuccess: () => { setTarget(''); setCheckedExecutionId(null); toast('Project relationship saved') },
       onError: (error: Error) => toast(error.message),
     })
   }
 
   const removeLink = (link: NativeProjectLink) => {
     if (busy) return
+    setCheckedExecutionId(null)
     links.mutate({ operation: 'remove', link }, {
       onSuccess: () => toast('Project relationship removed'),
       onError: (error: Error) => toast(error.message),
@@ -138,7 +142,7 @@ export function ProjectLinksEditor({
                   className="h-8 min-w-0 flex-1 rounded-sm border border-input bg-card px-2 text-label text-foreground"
                   value={target}
                   disabled={busy || unavailable}
-                  onChange={(event) => setTarget(event.target.value)}
+                  onChange={(event) => { setTarget(event.target.value); setCheckedExecutionId(null); routing.reset() }}
                 >
                   <option value="">Choose a registered project…</option>
                   {peers.map((peer) => (
@@ -212,6 +216,49 @@ export function ProjectLinksEditor({
                     </p>
                   ))}
                 </>
+              ) : null}
+            </div>
+            <div className="border-t border-border pt-2" data-slot="project-routing-preview">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-label font-medium">Execution target check</p>
+                  <p className="text-meta text-soft-foreground">
+                    Verify whether this product can use the target selected above for a future native agent job.
+                    This check never queues work.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  data-action="graph-preview-route"
+                  disabled={!target || busy || routing.isPending}
+                  onClick={() => {
+                    setCheckedExecutionId(target)
+                    routing.mutate({ logicalProjectId: project.id, executionProjectId: target })
+                  }}
+                >
+                  Check
+                </Button>
+              </div>
+              {routing.isPending && checkedExecutionId === target ? (
+                <p className="mt-1 text-label text-soft-foreground">Validating execution checkout…</p>
+              ) : null}
+              {routing.isError && checkedExecutionId === target ? (
+                <p role="alert" className="mt-1 text-label text-danger">
+                  Route check failed: {routing.error.message}
+                </p>
+              ) : null}
+              {routing.data && checkedExecutionId === target ? (
+                <p
+                  role="status"
+                  className={routing.data.eligible ? 'mt-1 text-label text-foreground' : 'mt-1 text-label text-danger'}
+                  data-slot="project-routing-result"
+                >
+                  {routing.data.eligible
+                    ? `Target is eligible for planning: ${routing.data.executionProjectId}. Actual admission still uses Cezar's native pool controls.`
+                    : `Target unavailable: ${routing.data.reason}${routing.data.blockedReason ? ` (${routing.data.blockedReason})` : ''}`}
+                </p>
               ) : null}
             </div>
             {graph.data.unresolvedLinks.length > 0 ? (
