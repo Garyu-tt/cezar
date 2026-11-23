@@ -31,6 +31,8 @@
     "server-deploy": "npm run server-deploy -w @open-mercato/cezar --",
     "server-uninstall": "npm run server-uninstall -w @open-mercato/cezar --",
     "test": "vitest run",
+    "ecosystem": "node scripts/ecosystem.mjs",
+    "test:ecosystem": "node --test scripts/ecosystem.test.mjs",
     "test:watch": "vitest",
     "test:unit": "npm run test:unit -w @open-mercato/cezar",
     "test:package": "npm run test:package -w @open-mercato/cezar",

@@ -1,0 +1,131 @@
+{
+  "schemaVersion": 1,
+  "githubOwner": "Garyu-tt",
+  "focus": "Garyu-tt/mojum",
+  "repositories": [
+    {
+      "fullName": "Garyu-tt/adamantium-node",
+      "defaultBranch": "main"
+    },
+    {
+      "fullName": "Garyu-tt/AdamantiumToolBox",
+      "defaultBranch": "main"
+    },
+    {
+      "fullName": "Garyu-tt/AlertoZAP",
+      "defaultBranch": "main"
+    },
+    {
+      "fullName": "Garyu-tt/BitWare",
+      "defaultBranch": "main"
+    },
+    {
+      "fullName": "Garyu-tt/BrainFryGameAgent",
+      "defaultBranch": "main"
+    },
+    {
+      "fullName": "Garyu-tt/brian2",
+      "defaultBranch": "master"
+    },
+    {
+      "fullName": "Garyu-tt/cezar",
+      "defaultBranch": "main"
+    },
+    {
+      "fullName": "Garyu-tt/CppMicroServices",
+      "defaultBranch": "development"
+    },
+    {
+      "fullName": "Garyu-tt/cyclondex",
+      "defaultBranch": "main"
+    },
+    {
+      "fullName": "Garyu-tt/DedupArc",
+      "defaultBranch": "main"
+    },
+    {
+      "fullName": "Garyu-tt/flygym",
+      "defaultBranch": "main"
+    },
+    {
+      "fullName": "Garyu-tt/Frontear",
+      "defaultBranch": "main"
+    },
+    {
+      "fullName": "Garyu-tt/godot",
+      "defaultBranch": "master"
+    },
+    {
+      "fullName": "Garyu-tt/mikoshi",
+      "defaultBranch": "main"
+    },
+    {
+      "fullName": "Garyu-tt/mikoshi-hq500m",
+      "defaultBranch": "main"
+    },
+    {
+      "fullName": "Garyu-tt/mikoshi-hq8.6b",
+      "defaultBranch": "main"
+    },
+    {
+      "fullName": "Garyu-tt/mojum",
+      "defaultBranch": "main"
+    },
+    {
+      "fullName": "Garyu-tt/mujoco",
+      "defaultBranch": "main"
+    },
+    {
+      "fullName": "Garyu-tt/mujoco_menagerie",
+      "defaultBranch": "main"
+    },
+    {
+      "fullName": "Garyu-tt/noosphere-lite-mcp",
+      "defaultBranch": "main"
+    },
+    {
+      "fullName": "Garyu-tt/Omnissiahpp",
+      "defaultBranch": "main"
+    },
+    {
+      "fullName": "Garyu-tt/pokemin-yellow-flipper",
+      "defaultBranch": "main"
+    },
+    {
+      "fullName": "Garyu-tt/sherpa-onnx",
+      "defaultBranch": "master"
+    },
+    {
+      "fullName": "Garyu-tt/three-vrm",
+      "defaultBranch": "dev"
+    },
+    {
+      "fullName": "Garyu-tt/tinner",
+      "defaultBranch": "main"
+    },
+    {
+      "fullName": "Garyu-tt/wayfire",
+      "defaultBranch": "master"
+    },
+    {
+      "fullName": "Garyu-tt/x1LiberNT",
+      "defaultBranch": "master"
+    },
+    {
+      "fullName": "Garyu-tt/x1SteamOS",
+      "defaultBranch": "main"
+    }
+  ],
+  "relations": [
+    {
+      "from": "Garyu-tt/mojum",
+      "to": "Garyu-tt/AdamantiumToolBox",
+      "type": "part-of"
+    },
+    {
+      "from": "Garyu-tt/AdamantiumToolBox",
+      "to": "Garyu-tt/adamantium-node",
+      "type": "built-on"
+    }
+  ]
+}
