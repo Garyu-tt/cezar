@@ -6,6 +6,36 @@
 > Tracking: `.ai/plans/2026-11-23-hierarchical-multirepo-projects.md`
 > Scope: generic Cezar platform capability; Adamantium is an example, not a hard-coded integration.
 
+## Account-wide ecosystem (clarification, 2026-11-23)
+
+**The GitHub account is ONE logical ecosystem, not a set of unrelated projects.**
+Every owned repository and every explicitly selected upstream fork is a potential reusable component,
+including repositories not currently cloned into the Cezar machine. The ecosystem itself is a
+**virtual root** without a Git checkout, an agent worktree, or a forced `parentProjectId`.
+Do not represent the whole account by nesting physical Git repositories or by placing every
+component inside a fake top-level Git repo.
+
+At discovery time, separate **catalog membership** from confirmed dependencies. New repos enter
+the catalog as **unclassified**, never as an invented technical dependency or an implicit task
+target. Users/agents can progressively identify which repo implements each capability and link
+that capability to multiple consuming projects. Repo reuse is many-to-many, independent of any
+optional hierarchy used for navigation.
+
+The currently preferred **focus** is Mojum, but the account-wide orchestration should schedule
+independent work on all other eligible projects at the same time, subject to the user's priorities,
+per-project caps, provider quotas and host resources. It must not freeze the rest of the GitHub
+ecosystem merely because one project is focused in the UI.
+
+**Privacy:** the account currently includes both public and private repositories. Account
+discovery must never automatically commit private repository names, paths, issue titles, source
+or link endpoints into a public fork. A local protected overlay or another authorized private
+storage boundary holds private catalog metadata. No enumeration is interpreted as permission
+to read, modify, clone or publish private code.
+
+**Incremental implementation:** PR #2 contains an optional repository catalog and graph/impact
+CLI bootstrap, with private metadata separated from the public tracked manifest. That is
+a planning prototype, not integration into Cezar's runtime dispatch, UI or task review gates.
+
 ## Problem
 
 Cezar already supports a multi-project workspace: project registry in `packages/cezar/src/workspace/config.ts`, per-repo execution contexts, project-scoped routes, a project switcher/folders and tags, and a global task index. These are **independent repositories**, not an architectural project hierarchy. A user coordinating a product composed of several repos cannot currently declare ownership, dependencies, feature providers and an active main/focus product, or route a single feature coherently into multiple independent repo-specific tasks.
