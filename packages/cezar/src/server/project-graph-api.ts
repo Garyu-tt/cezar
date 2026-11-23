@@ -27,7 +27,7 @@ const linkInput = z.object({
 });
 
 const catalogInput = z.object({
-  repositories: z.array(z.string().regex(/^[a-zA-Z0-9_.-]+\\/[a-zA-Z0-9_.-]+$/)).max(1000),
+  repositories: z.array(z.string().regex(/^[a-zA-Z0-9_.-]+[/][a-zA-Z0-9_.-]+$/)).max(1000),
 });
 
 export function createProjectGraphRoutes(singleProject: () => boolean) {
