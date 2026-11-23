@@ -348,3 +348,23 @@ export const nativeProjectPlanSchema = z.object({
   previewOnly: z.literal(true),
 });
 export type NativeProjectPlan = z.infer<typeof nativeProjectPlanSchema>;
+
+/**
+ * Diagnostic only. Actual jobs must be submitted through the native,
+ * project-scoped agent pool and its normal provider/resource controls.
+ */
+export const nativeProjectRoutingPreviewSchema = z.object({
+  logicalProjectId: z.string(),
+  executionProjectId: z.string(),
+  eligible: z.boolean(),
+  reason: z.enum([
+    'ready', 'unknown-logical-project', 'unknown-execution-project',
+    'outside-logical-scope', 'execution-blocked',
+  ]),
+  nativePoolEndpoint: z.string().nullable(),
+  blockedReason: nativeProjectPlanBlockReasonSchema.nullable(),
+  blockedBy: z.array(z.string()),
+  logicalScope: z.array(z.string()),
+  previewOnly: z.literal(true),
+});
+export type NativeProjectRoutingPreview = z.infer<typeof nativeProjectRoutingPreviewSchema>;
