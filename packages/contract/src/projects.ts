@@ -151,7 +151,7 @@ export const PROJECT_TAGS_MAX = 20;
  */
 export const updateProjectInputSchema = z
   .object({
-    maxParallel: z.number().int().min(1).max(16).nullable().optional(),
+    maxParallel: z.number().int().min(1).max(500).nullable().optional(),
     tags: z
       .array(z.string().trim().min(1).max(PROJECT_TAG_MAX_LENGTH))
       .max(PROJECT_TAGS_MAX)
