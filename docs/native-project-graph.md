@@ -69,7 +69,7 @@ gates remain authoritative.
 
 - ✅ Native validated graph data, focus, relationship mutation and CLI planning.
 - ✅ Atomic deregistration cleanup and regression tests.
-- ⏳ Typed HTTP API and existing project-switcher/settings/Tasks integration.
+- ✅ Same-origin HTTP API for reading focus/links and updating links/focus:\n  `GET /api/v1/workspace/project-graph`,\n  `PUT /api/v1/workspace/project-graph/focus`,\n  `POST/DELETE /api/v1/workspace/project-graph/links`.\n- ⏳ Existing project-switcher/settings/Tasks interface integration.
 - ⏳ Remote catalog mapping, automatic capability ownership discovery.
 - ⏳ Agent routing from logical product to explicit execution repository,
   cross-repo dependency gates and aggregated PR/review state.
