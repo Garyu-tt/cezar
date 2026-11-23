@@ -74,7 +74,7 @@ describe('existing row project graph popover', () => {
     fireEvent.change(target, { target: { value: 'adamantiumtoolbox' } })
     const relation = screen.getByLabelText('Relationship')
     fireEvent.change(relation, { target: { value: 'part-of' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Link', exact: true }))
+    fireEvent.click(screen.getByRole('button', { name: /^Link$/ }))
     await waitFor(() => expect(requests.some((item) =>
       item.method === 'POST' && item.url === '/api/v1/workspace/project-graph/links' &&
       JSON.stringify(item.body) === JSON.stringify({
