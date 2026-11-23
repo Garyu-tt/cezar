@@ -10,6 +10,7 @@ import {
   useSetNativeProjectFocus,
 } from '@/api/queries'
 import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'
 import { toast } from '@/components/ui/toaster'
 
@@ -122,33 +123,30 @@ export function ProjectLinksEditor({
           <div className="mt-3 space-y-3">
             <div className="border-t border-border pt-3">
               <label htmlFor={`graph-relation-${project.id}`} className="text-label font-medium">Relationship</label>
-              <select
-                id={`graph-relation-${project.id}`}
-                data-slot="graph-relation-type"
-                className="mt-1 h-8 w-full rounded-sm border border-input bg-card px-2 text-label text-foreground"
-                disabled={busy || unavailable}
-                value={type}
-                onChange={(event) => setType(event.target.value as RelationType)}
-              >
-                {RELATIONS.map((relation) => (
-                  <option key={relation.type} value={relation.type}>{relation.label}</option>
-                ))}
-              </select>
+              <Select value={type} onValueChange={(value) => setType(value as RelationType)} disabled={busy || unavailable}>
+                <SelectTrigger id={`graph-relation-${project.id}`}
+                  aria-label="Relationship" data-slot="graph-relation-type"
+                  className="mt-1 w-full" size="sm"><SelectValue /></SelectTrigger>
+                <SelectContent position="popper">
+                  {RELATIONS.map((relation) => (
+                    <SelectItem key={relation.type} value={relation.type}>{relation.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <label htmlFor={`graph-target-${project.id}`} className="mt-2 block text-label font-medium">Target project</label>
               <div className="mt-1 flex gap-2">
-                <select
-                  id={`graph-target-${project.id}`}
-                  data-slot="graph-target-project"
-                  className="h-8 min-w-0 flex-1 rounded-sm border border-input bg-card px-2 text-label text-foreground"
-                  value={target}
-                  disabled={busy || unavailable}
-                  onChange={(event) => { setTarget(event.target.value); setCheckedExecutionId(null); routing.reset() }}
-                >
-                  <option value="">Choose a registered project…</option>
-                  {peers.map((peer) => (
-                    <option key={peer.id} value={peer.id}>{peer.name} ({peer.id})</option>
-                  ))}
-                </select>
+                <Select value={target} onValueChange={(value) => { setTarget(value); setCheckedExecutionId(null); routing.reset() }} disabled={busy || unavailable}>
+                  <SelectTrigger id={`graph-target-${project.id}`}
+                    aria-label="Target project" data-slot="graph-target-project"
+                    className="min-w-0 flex-1" size="sm">
+                    <SelectValue placeholder="Choose a registered project…" />
+                  </SelectTrigger>
+                  <SelectContent position="popper">
+                    {peers.map((peer) => (
+                      <SelectItem key={peer.id} value={peer.id}>{peer.name} ({peer.id})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Button
                   size="sm" type="button" data-action="graph-add-link"
                   disabled={!target || busy || unavailable}

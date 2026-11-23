@@ -1,4 +1,12 @@
 import { loadGithubAsset } from './forge/github-assets.ts';
+import { NativeAgentPool, AgentPoolPreflightUnavailable } from '../agent-pool/pool.ts';
+import { localOpenCodeModelReady } from '../agent-pool/local-provider.ts';
+import {
+  agentPoolSetInputSchema,
+  agentPoolEnqueueInputSchema,
+  agentPoolStatusSchema,
+} from '@open-mercato/cezar-contract';
+
 import { createWebhookRoutes } from './webhooks.ts';
 import { WebhookCoordinator } from '../webhooks/coordinator.ts';
 import { webhooksEnabled } from '../webhooks/service.ts';
@@ -5316,6 +5324,107 @@ export function createApp(deps: ServerDeps) {
     return c.body(stream, 200, artifactHeaders(artifact, artifactsCdnEnabled(), artifactsBaseUrl(c.req.url)));
   };
 
+  // Native dynamic agent pool: tasks are ordinary Cezar RunManager runs.
+  // Reuse the existing task list and history; never add a second GUI, runner
+  // or standalone model fleet. Persist only work awaiting a native run.
+  const agentPools = new Map<string, Promise<NativeAgentPool>>();
+  const poolTimers = new Map<string, ReturnType<typeof setInterval>>();
+  deps.onDispose?.(() => {
+    for (const timer of poolTimers.values()) clearInterval(timer);
+    poolTimers.clear();
+  });
+  const poolFor = (project: ProjectContext): Promise<NativeAgentPool> => {
+    const existing = agentPools.get(project.dataDir);
+    if (existing) return existing;
+    const loading = NativeAgentPool.open({
+      dataDir: project.dataDir,
+      listRuns: () => project.store.listRuns().map((r) => ({
+        id: r.id, task: r.task, status: r.status,
+      })),
+      capacity: () => deps.semaphore?.projectMaxParallel(project.root) ?? 2,
+      launch: async (task, readOnly, model) => {
+        // Preserve the same provider/account availability gate as POST /runs.
+        if (model && agentModelsLocked(project.root)) {
+          throw new AgentPoolPreflightUnavailable('Model override is locked by operator');
+        }
+        const fallback = (await loadConfig(project.root)).defaultRunner;
+        const denied = await providerActionError(
+          providersRequiredByWorkflow(QUICK_TASK_WORKFLOW, fallback),
+          { repoRoot: project.root },
+        );
+        if (denied) {
+          // OpenCode's auth-list can return zero OAuth credentials even when
+          // an operator configured a healthy LOCAL API-key backend. Accept
+          // that narrow case only, with an exact enabled config/model match.
+          const row = fallback === 'opencode'
+            ? (await providerStatus()).providers.find((p) => p.provider === 'opencode')
+            : undefined;
+          const localReady = Boolean(
+            model && row && row.enabled !== false && !row.authFailureId
+            && await localOpenCodeModelReady(model),
+          );
+          if (!localReady) throw new AgentPoolPreflightUnavailable('Native agent provider not available');
+        }
+        return project.manager.startRun(QUICK_TASK_WORKFLOW, {
+          task,
+          readOnly,
+          ...(model ? { model } : {}),
+          autonomous: !readOnly,
+          generateFollowups: false,
+        }).id;
+      },
+    }).then((pool) => {
+      const timer = setInterval(() => {
+        void pool.tick().catch((error: unknown) => {
+          console.warn('[cezar] native agent-pool tick failed:', error instanceof Error ? error.name : 'unknown');
+        });
+      }, 4_000);
+      timer.unref?.();
+      poolTimers.set(project.dataDir, timer);
+      void pool.tick().catch(() => {});
+      return pool;
+    }).catch((error: unknown) => {
+      agentPools.delete(project.dataDir);
+      throw error;
+    });
+    agentPools.set(project.dataDir, loading);
+    return loading;
+  };
+  // Restart an enabled pool with its existing native run records.
+  // Fresh projects do not create files or launch anything on boot.
+  if (existsSync(join(bootContext.dataDir, 'agent-pool-v1.json'))) {
+    void poolFor(bootContext).catch(() => {
+      console.warn('[cezar] agent pool manifest could not be read; pool not started');
+    });
+  }
+  const agentPoolRoutes = new Hono<ProjectApiEnv>()
+    .get('/agent-pool', async (c) => {
+      try {
+        const pool = await poolFor(c.get('project'));
+        return c.json(agentPoolStatusSchema.parse(pool.status()));
+      } catch {
+        return c.json({ error: 'Agent pool status unavailable' }, 503);
+      }
+    })
+    .put('/agent-pool', jsonZodValidator(agentPoolSetInputSchema), async (c) => {
+      try {
+        const pool = await poolFor(c.get('project'));
+        const status = await pool.scale(c.req.valid('json').desired, c.req.valid('json').models);
+        return c.json(agentPoolStatusSchema.parse(status));
+      } catch {
+        return c.json({ error: 'Agent pool configuration could not be saved' }, 409);
+      }
+    })
+    .post('/agent-pool/jobs', jsonZodValidator(agentPoolEnqueueInputSchema), async (c) => {
+      try {
+        const pool = await poolFor(c.get('project'));
+        const status = await pool.enqueue(c.req.valid('json').jobs);
+        return c.json(agentPoolStatusSchema.parse(status), 201);
+      } catch {
+        return c.json({ error: 'Invalid, duplicate or unavailable agent pool jobs' }, 409);
+      }
+    });
+
   // ---- chained family: runs lifecycle + artifacts (project-scoped) ----
   const runsRoutes = new Hono<ProjectApiEnv>()
     // `workflowDef` is ~1.3 MB per run; the list leaves it out (`?full=1` opts back in, GET /runs/:id is always complete).
@@ -8717,6 +8826,7 @@ export function createApp(deps: ServerDeps) {
     .route('/', automationsRoutes)
     .route('/', webhookRoutes)
     .route('/', dispatchRoutes)
+    .route('/', agentPoolRoutes)
     .route('/', runsRoutes)
     .route('/', draftRoutes)
     .route('/', layoutRoutes)
