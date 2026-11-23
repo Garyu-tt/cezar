@@ -8,6 +8,21 @@
 **Priority:** platform feature for coordinating large multi-repo products.
 **Issue tracker:** Issues are disabled in this fork (GitHub returned HTTP 410), so this plan and the companion PR are the source of truth until Issues are enabled.
 
+## Clarified scope: all owned GitHub repositories
+
+Treat the user's GitHub account as one *virtual* ecosystem root. Discover and inventory all
+accessible repositories (including un-cloned ones) without creating fake parent checkouts.
+Introduce typed relationships as evidence is confirmed; unclassified repos remain independently
+schedulable. The focus product is a UI/task-planning context, **not** an exclusive execution
+scope: independent work across the rest of the graph may proceed in parallel.
+
+**Privacy gate:** do not write private repo identities into a tracked public catalog. Maintain
+a protected local overlay for private metadata and never auto-publish it.
+
+**Bootstrap:** PR #2 provides the checked-in public catalog, local private overlay, typed graph,
+impact/dependency queries, parallel-ready waves and tests. Next phases must integrate the graph
+with existing Cezar runtime state and project-scoped authorization, then task execution.
+
 ## Objective
 
 Add a focus-project workflow where the user chooses one main product and links as many other repositories as desired to it as subprojects, feature providers, or dependencies. Keep a real multi-level architectural hierarchy (e.g. `adamantium-node → AdamantiumToolBox → mojum`) even when the **focused** project is `mojum`. Route agent subtasks and PRs to their true execution repositories while preserving one project-wide progress view.
