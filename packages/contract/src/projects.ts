@@ -329,3 +329,22 @@ export const nativeProjectGraphSchema = z.object({
   unresolvedLinks: z.array(nativeProjectLinkSchema),
 });
 export type NativeProjectGraph = z.infer<typeof nativeProjectGraphSchema>;
+
+/** Side-effect-free portfolio preview: a graph wave is NOT authorization to dispatch. */
+export const nativeProjectPlanBlockReasonSchema = z.enum([
+  'missing-checkout', 'not-git', 'unresolved-dependency',
+  'blocked-dependency', 'cycle-or-dependent',
+]);
+export const nativeProjectPlanSchema = z.object({
+  focusProjectId: z.string().nullable(),
+  focusScope: z.array(z.string()),
+  waves: z.array(z.array(z.string())),
+  blocked: z.array(z.object({
+    id: z.string(),
+    reason: nativeProjectPlanBlockReasonSchema,
+    blockedBy: z.array(z.string()),
+  })),
+  unresolvedLinks: z.array(nativeProjectLinkSchema),
+  previewOnly: z.literal(true),
+});
+export type NativeProjectPlan = z.infer<typeof nativeProjectPlanSchema>;
