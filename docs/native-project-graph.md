@@ -52,6 +52,39 @@ external manual edits show up as **orphan** entries for repair.
 `CEZ_SINGLE_PROJECT=1` disables *all* new graph commands, including inspection,
 because listing graph edges would disclose other registered projects.
 
+## Portfolio parallel-readiness preview (R03)
+
+The read-only `GET /api/v1/workspace/project-graph/plan` API computes
+*portfolio-wide* dependency-first execution waves from **registered checkout IDs**
+and status probes. It does NOT start tasks, allocate model accounts, merge PRs,
+mark tasks complete or bypass Cezar's existing concurrency/semaphore/approval gates.
+
+The existing Settings → Projects → Links popover shows how many registered
+repositories are in each parallel-ready wave, and specifically why a selected
+project is blocked. One broken dependency chain does not prevent an unrelated
+repository from being planned.
+
+Safety properties:
+
+- A missing or unprobed checkout is blocked rather than inferred available.
+- A `not-git` root is blocked for Git-based cross-repository execution (though
+  Cezar may still offer its legacy degraded non-Git queue separately).
+- If a manually edited config leaves a link to an unregistered prerequisite,
+  that consumer is blocked, and its dependents inherit the block.
+- A dependency cycle blocks the cyclic component and its dependents; independent
+  acyclic components remain in valid waves.
+- A `provides-feature` edge is provider → consumer and must be reversed for
+  prerequisite ordering. All other edge types use consumer → prerequisite.
+- `CEZ_SINGLE_PROJECT=1` refuses this preview, including reads.
+- The endpoint returns project IDs and dependency reasons, not local filesystem
+  roots, private remote names, environment secrets or worktree identifiers.
+
+`cezar projects waves` remains the strict older global planner which refuses
+any cyclic dependency. The API preview is the safe, **partial** plan for
+supervising a heterogeneous ecosystem; it must never be construed as a dispatch
+authorization or as a guarantee that independent jobs will run concurrently
+within host/provider limits.
+
 ## Public catalog versus native workspace
 
 The GitHub-wide catalog can contain owned forks and repositories that are not

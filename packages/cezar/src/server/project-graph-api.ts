@@ -17,6 +17,7 @@ import {
 import { PROJECT_ID_RE } from '../workspace/config.ts';
 import { listProjects } from '../workspace/projects.ts';
 import { resolveGitHubCatalog } from '../workspace/project-catalog-bindings.ts';
+import { previewNativeProjectPlan } from '../workspace/project-graph-planner.ts';
 
 const id = z.string().regex(PROJECT_ID_RE);
 const focusInput = z.object({ projectId: id.nullable() });
@@ -39,6 +40,19 @@ export function createProjectGraphRoutes(singleProject: () => boolean) {
   };
 
   return new Hono()
+    .get('/workspace/project-graph/plan', async (c) => {
+      if (singleProject()) return c.json(refuses(), 409);
+      try {
+        // Read-only view of every registered project; a missing or cyclic
+        // component blocks only its dependents, never unrelated subprojects.
+        return c.json(
+          previewNativeProjectPlan(await readProjectGraph(), await listProjects()),
+          200,
+        );
+      } catch (error) {
+        return c.json(failure(error), 500);
+      }
+    })
     // Pure verification: the caller supplies catalog IDs, the server matches ONLY
     // parsed origin remotes already registered in Cezar. No clone, GitHub API or write.
     .post('/workspace/project-graph/catalog-bindings', async (c) => {

@@ -4,6 +4,7 @@ import type { ProjectListEntry, NativeProjectLink } from '@open-mercato/cezar-ap
 
 import {
   useNativeProjectGraph,
+  useNativeProjectPlan,
   useNativeProjectLinkMutation,
   useSetNativeProjectFocus,
 } from '@/api/queries'
@@ -40,6 +41,7 @@ export function ProjectLinksEditor({
   const [target, setTarget] = useState('')
   const [type, setType] = useState<RelationType>('depends-on')
   const graph = useNativeProjectGraph(open)
+  const plan = useNativeProjectPlan(open)
   const focus = useSetNativeProjectFocus()
   const links = useNativeProjectLinkMutation()
   const peers = projects.filter((entry) => entry.id !== project.id && !entry.unregistered)
@@ -83,7 +85,7 @@ export function ProjectLinksEditor({
       <PopoverContent
         align="end"
         sideOffset={6}
-        className="w-[min(25rem,calc(100vw-2rem))] p-3"
+        className="max-h-[min(38rem,80vh)] w-[min(25rem,calc(100vw-2rem))] overflow-y-auto p-3"
         data-slot="project-links-editor"
       >
         <div className="flex items-start justify-between gap-3">
@@ -177,6 +179,38 @@ export function ProjectLinksEditor({
                   ))}
                 </ul>
               )}
+            </div>
+            <div className="border-t border-border pt-2" data-slot="project-plan-preview">
+              <p className="text-label font-medium">Parallel readiness (preview only)</p>
+              <p className="text-meta text-soft-foreground">
+                Independent repositories remain eligible for planning even when another dependency chain is blocked.
+                No agents are started here.
+              </p>
+              {plan.isPending ? <p className="mt-1 text-label text-soft-foreground">Checking dependencies…</p> : null}
+              {plan.isError ? (
+                <p className="mt-1 text-label text-danger" role="status">Plan unavailable: {plan.error.message}</p>
+              ) : null}
+              {plan.data ? (
+                <>
+                  <p className="mt-1 text-label" data-slot="project-plan-counts">
+                    {plan.data.waves.flat().length} ready in {plan.data.waves.length} wave(s);
+                    {' '}{plan.data.blocked.length} blocked
+                  </p>
+                  <ul className="mt-1 max-h-32 space-y-1 overflow-y-auto text-label" data-slot="project-plan-waves">
+                    {plan.data.waves.map((wave, index) => (
+                      <li key={index}>
+                        <span className="font-medium">Wave {index + 1}:</span> {wave.join(', ')}
+                      </li>
+                    ))}
+                  </ul>
+                  {plan.data.blocked.filter((item) => item.id === project.id).map((item) => (
+                    <p key={item.id} className="mt-2 text-label text-danger" data-slot="project-plan-blocked">
+                      This project is blocked: {item.reason}
+                      {item.blockedBy.length > 0 ? ` (by ${item.blockedBy.join(', ')})` : ''}
+                    </p>
+                  ))}
+                </>
+              ) : null}
             </div>
             {graph.data.unresolvedLinks.length > 0 ? (
               <p className="text-meta text-soft-foreground">

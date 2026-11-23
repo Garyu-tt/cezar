@@ -98,11 +98,34 @@ describe('workspace project graph API', () => {
       { repositories: ['../../bad'] })).status).toBe(400);
   });
 
+  it('returns a read-only plan that blocks non-git checkouts without inventing execution rights', async () => {
+    await register('mojum');
+    await register('foundation');
+    const app = api();
+    expect((await request(app, 'POST', '/workspace/project-graph/links', {
+      from: 'mojum', to: 'foundation', type: 'depends-on',
+    })).status).toBe(200);
+    const before = await loadWorkspaceConfig();
+    const res = await app.request('/workspace/project-graph/plan');
+    expect(res.status).toBe(200);
+    const plan = await res.json() as {
+      previewOnly: boolean; waves: string[][]; blocked: Array<{ id: string; reason: string }>;
+    };
+    expect(plan.previewOnly).toBe(true);
+    expect(plan.waves).toEqual([]);
+    expect(plan.blocked.map((entry) => [entry.id, entry.reason])).toEqual([
+      ['foundation', 'not-git'], ['mojum', 'not-git'],
+    ]);
+    expect(JSON.stringify(plan)).not.toContain(root);
+    expect((await loadWorkspaceConfig()).projectGraph).toEqual(before.projectGraph);
+  });
+
   it('refuses all inspection and mutations without writing in single-project mode', async () => {
     await register('one');
     await register('two');
     const restricted = createProjectGraphRoutes(() => true);
     expect((await restricted.request('/workspace/project-graph')).status).toBe(409);
+    expect((await restricted.request('/workspace/project-graph/plan')).status).toBe(409);
     expect((await request(restricted, 'POST', '/workspace/project-graph/catalog-bindings',
       { repositories: ['Garyu-tt/mojum'] })).status).toBe(409);
     expect((await request(restricted, 'POST', '/workspace/project-graph/links',
