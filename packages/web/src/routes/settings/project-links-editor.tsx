@@ -93,7 +93,7 @@ export function ProjectLinksEditor({
           <Button
             type="button"
             size="sm"
-            variant={isExplicitFocus ? 'secondary' : 'outline'}
+            variant={isExplicitFocus ? 'contrast' : 'outline'}
             disabled={busy || graph.isPending || graph.isError}
             data-action="project-focus"
             onClick={() => focus.mutate(isExplicitFocus ? null : project.id, {
