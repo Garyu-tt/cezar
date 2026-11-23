@@ -50,14 +50,14 @@ describe('workspace project graph API', () => {
     const link = { from: 'mojum', to: 'adamantium-node', type: 'built-on' };
     const linked = await request(app, 'POST', '/workspace/project-graph/links', link);
     expect(linked.status).toBe(200);
-    expect((await linked.json()).links).toHaveLength(1);
+    expect((await linked.json() as { links: unknown[] }).links).toHaveLength(1);
     const focused = await request(app, 'PUT', '/workspace/project-graph/focus', { projectId: 'mojum' });
     expect(focused.status).toBe(200);
-    expect((await focused.json()).focusProjectId).toBe('mojum');
+    expect((await focused.json() as { focusProjectId: string }).focusProjectId).toBe('mojum');
     expect((await loadWorkspaceConfig()).projectGraph?.links).toEqual([link]);
     const removed = await request(app, 'DELETE', '/workspace/project-graph/links', link);
     expect(removed.status).toBe(200);
-    expect((await removed.json()).links).toHaveLength(0);
+    expect((await removed.json() as { links: unknown[] }).links).toHaveLength(0);
   });
 
   it('rejects cycles, bad JSON, unregistered targets and duplicate links without state damage', async () => {
