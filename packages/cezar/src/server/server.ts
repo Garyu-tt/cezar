@@ -1,5 +1,6 @@
 import { loadGithubAsset } from './forge/github-assets.ts';
 import { NativeAgentPool, AgentPoolPreflightUnavailable } from '../agent-pool/pool.ts';
+import { localOpenCodeModelReady } from '../agent-pool/local-provider.ts';
 import {
   agentPoolSetInputSchema,
   agentPoolEnqueueInputSchema,
@@ -5350,7 +5351,19 @@ export function createApp(deps: ServerDeps) {
           providersRequiredByWorkflow(QUICK_TASK_WORKFLOW, fallback),
           { repoRoot: project.root },
         );
-        if (denied) throw new AgentPoolPreflightUnavailable('Native agent provider not available');
+        if (denied) {
+          // OpenCode's auth-list can return zero OAuth credentials even when
+          // an operator configured a healthy LOCAL API-key backend. Accept
+          // that narrow case only, with an exact enabled config/model match.
+          const row = fallback === 'opencode'
+            ? (await providerStatus()).providers.find((p) => p.provider === 'opencode')
+            : undefined;
+          const localReady = Boolean(
+            model && row && row.enabled !== false && !row.authFailureId
+            && await localOpenCodeModelReady(model),
+          );
+          if (!localReady) throw new AgentPoolPreflightUnavailable('Native agent provider not available');
+        }
         return project.manager.startRun(QUICK_TASK_WORKFLOW, {
           task,
           readOnly,
