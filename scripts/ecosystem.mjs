@@ -14,7 +14,8 @@
  *   node scripts/ecosystem.mjs sync          # explicit network/gh operation
  */
 import { execFileSync } from 'node:child_process'
-import { readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { randomUUID } from 'node:crypto'
@@ -26,6 +27,9 @@ const norm = (value) => value.toLowerCase()
 const dependencyTypes = new Set(['part-of', 'built-on', 'depends-on'])
 
 export const defaultManifestPath = resolve(dirname(fileURLToPath(import.meta.url)), '../.ai/ecosystem.json')
+/** Private repo names and private links never enter the tracked public manifest. */
+export const privateManifestPath = () =>
+  resolve(process.env.CEZ_HOME || join(homedir(), '.cezar'), 'ecosystem-private.json')
 
 /** Validate before any mutation, including a parent-cycle and ambiguous IDs. */
 export function validateEcosystem(graph) {
@@ -204,9 +208,10 @@ export function mergeGitHubRepositories(graph, remote, { includePrivate = false 
     const known = byName.get(key)
     if (known) {
       if (typeof defaultBranch === 'string') known.defaultBranch = defaultBranch
+      known.isPrivate = item.isPrivate === true
       continue
     }
-    const added = { fullName: item.nameWithOwner }
+    const added = { fullName: item.nameWithOwner, isPrivate: item.isPrivate === true }
     if (typeof defaultBranch === 'string') added.defaultBranch = defaultBranch
     repositories.push(added)
     byName.set(key, added)
@@ -218,23 +223,65 @@ export function mergeGitHubRepositories(graph, remote, { includePrivate = false 
   return next
 }
 
+async function optionalJson(path) {
+  try {
+    return JSON.parse(await readFile(path, 'utf8'))
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null
+    throw error // a malformed private overlay must not be silently overwritten
+  }
+}
+
+/** Merge the private local overlay into the session, without publishing it. */
 async function load(path) {
-  const graph = JSON.parse(await readFile(path, 'utf8'))
+  const shared = JSON.parse(await readFile(path, 'utf8'))
+  const privateData = await optionalJson(privateManifestPath())
+  const graph = privateData
+    ? { ...shared,
+        focus: privateData.focus || shared.focus,
+        repositories: [...shared.repositories, ...(privateData.repositories || [])],
+        relations: [...shared.relations, ...(privateData.relations || [])] }
+    : shared
   const errors = validateEcosystem(graph)
   if (errors.length) throw new Error(errors.join('; '))
   return graph
 }
 
-async function save(path, graph) {
-  const errors = validateEcosystem(graph)
-  if (errors.length) throw new Error(errors.join('; '))
+async function atomicSave(path, value) {
   const temp = join(dirname(path), '.ecosystem-' + randomUUID() + '.tmp')
   try {
-    await writeFile(temp, JSON.stringify(graph, null, 2) + '\n', { mode: 0o600, flag: 'wx' })
+    await writeFile(temp, JSON.stringify(value, null, 2) + '\\n', { mode: 0o600, flag: 'wx' })
     await rename(temp, path)
   } finally {
     await rm(temp, { force: true }).catch(() => undefined)
   }
+}
+
+/** Split private repositories and every relationship touching them into a local-only overlay. */
+async function save(path, graph) {
+  const errors = validateEcosystem(graph)
+  if (errors.length) throw new Error(errors.join('; '))
+  const privateRepos = graph.repositories.filter((r) => r.isPrivate === true)
+  const privateNames = new Set(privateRepos.map((r) => norm(r.fullName)))
+  const isPrivate = (id) => privateNames.has(norm(id))
+  const oldShared = JSON.parse(await readFile(path, 'utf8'))
+  const shared = { ...graph,
+    focus: isPrivate(graph.focus) ? oldShared.focus : graph.focus,
+    repositories: graph.repositories.filter((r) => !r.isPrivate),
+    relations: graph.relations.filter((r) => !isPrivate(r.from) && !isPrivate(r.to)) }
+  const overlay = {
+    schemaVersion: 1,
+    focus: isPrivate(graph.focus) ? graph.focus : null,
+    repositories: privateRepos,
+    relations: graph.relations.filter((r) => isPrivate(r.from) || isPrivate(r.to)),
+  }
+  const sharedErrors = validateEcosystem(shared)
+  if (sharedErrors.length) throw new Error('public manifest invalid after splitting private entries: ' + sharedErrors.join('; '))
+  if (privateRepos.length || (await optionalJson(privateManifestPath())) !== null) {
+    await mkdir(dirname(privateManifestPath()), { recursive: true, mode: 0o700 })
+    await atomicSave(privateManifestPath(), overlay)
+  }
+  await atomicSave(path, shared)
 }
 
 export async function runCli(args = process.argv.slice(2), path = defaultManifestPath) {
@@ -277,7 +324,7 @@ export async function runCli(args = process.argv.slice(2), path = defaultManifes
     const next = mergeGitHubRepositories(graph, JSON.parse(stdout), { includePrivate })
     await save(path, next)
     print({ repositories: next.repositories.length, retainedRelations: next.relations.length,
-      includePrivate, note: 'Catalog only: no repository was cloned or modified' })
+      includePrivate, note: 'Private entries, if enabled, stay in the local CEZ_HOME overlay. No repository was cloned or modified' })
     return
   }
   throw new Error('unknown command: ' + command + '\ncommands: summary, validate, scope, dependencies, impact, waves, focus, link, unlink, sync')
