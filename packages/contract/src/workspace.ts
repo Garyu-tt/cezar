@@ -124,7 +124,7 @@ export const setWorkspaceConfigInputSchema = z.object({
     .optional(),
   resources: z
     .object({
-      maxParallel: z.number().int().min(1).max(16).optional(),
+      maxParallel: z.number().int().min(1).max(500).optional(),
       maxMonitoringSessions: z.number().int().min(0).max(16).optional(),
       idleTimeoutMinutes: z.number().int().min(0).max(1440).nullable().optional(),
       monitoringWakeIntervalMinutes: z.number().int().min(1).max(60).nullable().optional(),
@@ -526,7 +526,7 @@ export const setConfigInputSchema = z.object({
       omp: z.boolean().nullable().optional(),
     })
     .optional(),
-  maxParallel: z.number().int().min(1).max(16).optional(),
+  maxParallel: z.number().int().min(1).max(500).optional(),
   /** null or 0 clears the ceiling back to "no limit". */
   memoryLimitMb: z.number().int().min(0).max(1_048_576).nullable().optional(),
   /** Keep last N finished worktrees (#483); 0 = unlimited, null clears back to the default (10). */

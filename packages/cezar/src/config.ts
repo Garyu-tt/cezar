@@ -37,7 +37,7 @@ export const configSchema = z.object({
   worktreeLifecycle: worktreeLifecycleConfigSchema.optional().catch(undefined),
   skillsRepos: z.array(skillsRepoSchema).default(DEFAULT_SKILLS_REPOS),
   /** How many tasks may run at once (spec 006). Non-git dirs always run 1. */
-  maxParallel: z.number().int().min(1).max(16).default(2),
+  maxParallel: z.number().int().min(1).max(500).default(2),
   /**
    * Count-based worktree retention (#483): keep the last N *finished*
    * worktrees materialized on disk; reclaim older ones (directory only — the

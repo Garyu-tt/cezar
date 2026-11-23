@@ -56,7 +56,7 @@ const workspaceProjectSchema = z
      *  workspace `resources.maxParallel`. Bounded like the workspace cap; a bad
      *  value degrades to "inherit" (`.catch(undefined)`) rather than a hard
      *  default, and `.passthrough()` preserves the key across cezar round-trips. */
-    maxParallel: z.number().int().min(1).max(16).optional().catch(undefined),
+    maxParallel: z.number().int().min(1).max(500).optional().catch(undefined),
     /** Free-form labels grouping connected repositories (`storefront`, `infra`), used by the
      *  global Tasks page to filter and group across projects. Absent = untagged; the writers
      *  (`PATCH /api/projects/:id`, `cezar projects tag`) delete the key rather than storing `[]`,
@@ -131,7 +131,7 @@ const diskGuardSchema = z
 const resourcesSchema = z
   .object({
     /** Workspace-wide parallel-task cap (moved from per-repo config.json). */
-    maxParallel: z.number().int().min(1).max(16).default(2).catch(2),
+    maxParallel: z.number().int().min(1).max(500).default(2).catch(2),
     /** Extra durable `CEZ:MONITORING` sessions exempt from the active-task cap. */
     maxMonitoringSessions: z.number().int().min(0).max(16).default(2).catch(2),
     /** Plain `waiting`/`CEZ:ASK` session idle timeout; null or 0 disables this safeguard. */
