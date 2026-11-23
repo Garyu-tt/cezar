@@ -80,7 +80,8 @@ describe('existing row project graph popover', () => {
       JSON.stringify(item.body) === JSON.stringify({
         from: 'mojum', to: 'adamantiumtoolbox', type: 'part-of',
       }))).toBe(true))
-    await waitFor(() => expect(document.querySelector('[data-slot="project-links-editor"] li')?.textContent)\n      .toContain('part-of'))
+    await waitFor(() => expect(document.querySelector('[data-slot="project-links-editor"] li')?.textContent)
+      .toContain('part-of'))
   })
 
   it('refuses to invent a local execution project for remote/unregistered targets', async () => {
