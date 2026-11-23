@@ -105,6 +105,35 @@ describe('native pool API creates ordinary Cezar tasks', () => {
     expect(agentPoolStatusSchema.parse(await alias.json()).jobs).toHaveLength(17);
   });
 
+  it('fails closed for graph-owned native jobs until server-side routing is wired', async () => {
+    expect((await request('/agent-pool', 'PUT', { desired: 2 })).status).toBe(200);
+    const protectedJob = {
+      id: 'mojum-build-1',
+      task: 'Implement and test a scoped cross-repository feature for Mojum',
+      role: 'integration', readOnly: false, logicalProjectId: 'mojum',
+    };
+    const staged = await request('/agent-pool/jobs', 'POST', { jobs: [protectedJob] });
+    expect(staged.status).toBe(201);
+    const blocked = agentPoolStatusSchema.parse(await staged.json());
+    expect(blocked.jobs[0]).toMatchObject({
+      id: 'mojum-build-1', logicalProjectId: 'mojum', state: 'pending',
+      admissionBlock: 'graph-admission-unavailable',
+    });
+    expect(blocked.blocked).toBe(1);
+    expect(store.listRuns()).toHaveLength(0);
+    expect(launches).toBe(0);
+
+    const ordinary = await request('/agent-pool/jobs', 'POST', { jobs: [{
+      id: 'independent-build-1',
+      task: 'Add and test an isolated regression fix in this existing repository',
+      role: 'test', readOnly: true,
+    }] });
+    expect(ordinary.status).toBe(201);
+    expect(agentPoolStatusSchema.parse(await ordinary.json()).jobs[1]?.state).toBe('launched');
+    expect(store.listRuns()).toHaveLength(1);
+    expect(launches).toBe(1);
+  });
+
   it('rejects bad scaling and duplicate work without launching any tasks', async () => {
     expect((await request('/agent-pool', 'PUT', { desired: 501 })).status).toBe(400);
     expect((await request('/agent-pool', 'PUT', { desired: -1 })).status).toBe(400);

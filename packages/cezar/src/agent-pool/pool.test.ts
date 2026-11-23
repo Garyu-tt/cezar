@@ -2,10 +2,10 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { AgentPoolPreflightUnavailable, NativeAgentPool, nativePoolMarker, type NativePoolRun } from './pool.ts';
+import { AgentPoolPreflightUnavailable, NativeAgentPool, nativePoolMarker, type NativePoolRun, type AgentPoolPorts } from './pool.ts';
 
 const directories: string[] = [];
-async function harness(cap = 17) {
+async function harness(cap = 17, admit?: AgentPoolPorts['admit']) {
   const dir = await mkdtemp(join(tmpdir(), 'cezar-native-pool-test-'));
   directories.push(dir);
   const runs: NativePoolRun[] = [];
@@ -16,6 +16,7 @@ async function harness(cap = 17) {
     dataDir: dir,
     listRuns: () => runs,
     capacity: () => resourceLimit,
+    ...(admit ? { admit } : {}),
     launch: (task: string, readOnly: boolean, _model?: string) => {
       if (failLaunch) throw new Error('provider unavailable');
       const id = 'native-' + (runs.length + 1);
@@ -161,6 +162,75 @@ describe('native dynamic agent pool', () => {
     accessible = true;
     await h.pool.tick();
     expect(h.launched).toHaveLength(1);
+  });
+
+  it('refuses graph-owned jobs without a server admission callback while serving unrelated jobs', async () => {
+    const h = await harness(5);
+    await h.pool.enqueue([
+      { id: 'guarded', task: 'Implement Mojum feature in the explicitly assigned workspace', role: 'build',
+        readOnly: false, logicalProjectId: 'mojum' },
+      { id: 'ordinary', task: 'Fix an unrelated existing repository regression test', role: 'test', readOnly: true },
+    ]);
+    const result = await h.pool.scale(2);
+    expect(h.launched).toHaveLength(1);
+    expect(result.waiting).toBe(0);
+    expect(result.blocked).toBe(1);
+    expect(result.jobs.find((j) => j.id === 'guarded')).toMatchObject({
+      state: 'pending', logicalProjectId: 'mojum',
+      admissionBlock: 'graph-admission-unavailable',
+    });
+    expect(result.jobs.find((j) => j.id === 'ordinary')?.state).toBe('launched');
+  });
+
+  it('rechecks graph eligibility immediately before native launch, then resumes one job exactly once', async () => {
+    let eligible = false;
+    let checks = 0;
+    const h = await harness(5, () => { checks++; return eligible; });
+    await h.pool.enqueue([
+      { id: 'planned', task: 'Implement the verified feature for the owner product Mojum',
+        logicalProjectId: 'mojum', role: 'integration', readOnly: false },
+    ]);
+    // A client-side planning preview is NOT an admission signal.
+    expect(h.launched).toHaveLength(0);
+    expect((await h.pool.scale(2)).jobs[0]).toMatchObject({
+      state: 'pending', admissionBlock: 'graph-route-refused', logicalProjectId: 'mojum',
+    });
+    expect(checks).toBe(1);
+    expect(h.launched).toHaveLength(0);
+    eligible = true;
+    const allowed = await h.pool.tick();
+    expect(h.launched).toHaveLength(1);
+    expect(allowed.jobs[0]).toMatchObject({ state: 'launched', logicalProjectId: 'mojum' });
+    expect(allowed.jobs[0]?.admissionBlock).toBeUndefined();
+    await h.pool.tick();
+    expect(h.launched).toHaveLength(1);
+  });
+
+  it('does not confuse a thrown graph gate with an uncertain run creation', async () => {
+    const h = await harness(5, () => { throw new Error('private path must not be echoed'); });
+    await h.pool.enqueue([
+      { id: 'guarded', task: 'Review graph dependency before running a native task',
+        logicalProjectId: 'mojum', role: 'review', readOnly: true },
+    ]);
+    const view = await h.pool.scale(1);
+    expect(view.jobs[0]).toMatchObject({
+      state: 'pending', admissionBlock: 'graph-admission-error',
+    });
+    expect(h.launched).toHaveLength(0);
+    expect(JSON.stringify(view)).not.toContain('private path must not be echoed');
+  });
+
+  it('treats changing logical owner as idempotency conflict, never silently redirects execution', async () => {
+    const h = await harness();
+    const incoming = {
+      id: 'same-job', task: 'Implement and test the same long-running cross-repo feature',
+      role: 'build' as const, readOnly: false, logicalProjectId: 'mojum',
+    };
+    await h.pool.enqueue([incoming]);
+    await expect(h.pool.enqueue([{ ...incoming, logicalProjectId: 'independent' }]))
+      .rejects.toThrow('conflicts');
+    expect(h.pool.status().jobs).toHaveLength(1);
+    expect(h.pool.status().jobs[0]?.logicalProjectId).toBe('mojum');
   });
 
   it('routes 17 native Cezar tasks across weighted operator-selected models, with manual overrides', async () => {

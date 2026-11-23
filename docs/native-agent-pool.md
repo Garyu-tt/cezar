@@ -72,6 +72,50 @@ The `nativeActive` metric counts Cezar runs whose status is actually
 A job's `runId` opens its native Cezar task in the existing interface. Do not
 infer active work from the mere number of registered logical IDs.
 
+## Optional graph-owned job admission (R05 seam)
+
+The existing project-scoped job schema additionally accepts an optional
+`logicalProjectId` naming the owning product. This is **not** a new
+`executionProjectId` override. The URL and its native project context still
+determine the checkout, worktree, permissions and PR. For example:
+
+```json
+{
+  "jobs": [{
+    "id": "mojum-issue-123",
+    "task": "Implement and verify the approved scoped integration task",
+    "role": "integration",
+    "readOnly": false,
+    "logicalProjectId": "mojum"
+  }]
+}
+```
+
+This metadata is an **opt-in safety boundary**:
+- Legacy jobs without `logicalProjectId` continue launching exactly as before.
+- Jobs with `logicalProjectId` require the optional server-side
+  `AgentPoolPorts.admit(job)` callback, which must validate the logical
+  owner against the actual Cezar execution project.
+- Until that callback is wired to the installed workspace graph, protected
+  jobs stay **pending**, not silently launched. Status exposes a generic
+  `admissionBlock: "graph-admission-unavailable"`.
+- If callback refuses, the job remains pending with
+  `graph-route-refused`; exceptions remain pending with
+  `graph-admission-error`. Neither can create a native run, leak exception
+  details or count as an uncertain partial launch.
+- The pool checks eligibility immediately **before** creating the native
+  run and before crash fencing. A stale client-side preview never authorizes
+  an execution.
+- A blocked protected job does not stop unrelated eligible jobs from being
+  launched. The guard is checked again on each pool tick, so a corrected
+  dependency may unblock it without re-enqueuing and duplicating the job.
+- Reusing one job ID with a changed logical owner is an idempotency conflict.
+
+**Integration still required:** the native graph PRs must land, then the
+project-scoped server pool factory must pass the actual execution project ID
+into `admit` and call the graph routing evaluator. R05 alone intentionally
+**does not** permit graph-owned jobs to start.
+
 ## Safety and lifecycle
 
 - Nothing launches until the operator explicitly sets a positive target and

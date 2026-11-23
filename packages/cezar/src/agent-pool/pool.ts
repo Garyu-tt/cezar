@@ -21,6 +21,9 @@ const storedJob = agentPoolJobInputSchema.extend({
   selectedModel: z.string().optional(),
   runId: z.string().optional(),
   slot: z.number().int().positive().optional(),
+  admissionBlock: z.enum([
+    'graph-admission-unavailable', 'graph-route-refused', 'graph-admission-error',
+  ]).optional(),
 });
 const storedState = z.object({
   schema: z.literal('cezar.agent-pool.v1'),
@@ -43,6 +46,12 @@ export interface AgentPoolPorts {
   listRuns: () => NativePoolRun[];
   /** Existing Cezar workspace semaphore, refreshed when resource settings change. */
   capacity: () => number;
+  /** Optional graph-aware admission for jobs with logicalProjectId.
+   * Called BEFORE crash fencing and RunManager.startRun, on every retry.
+   * If absent, graph-owned jobs stay pending; legacy jobs remain unchanged.
+   * Never use a browser's earlier preview as permission to launch.
+   */
+  admit?: (job: Readonly<AgentPoolJobInput>) => boolean | Promise<boolean>;
 }
 
 /** Safe to retry: the provider gate rejected work BEFORE a native run was created. */
@@ -127,9 +136,9 @@ export class NativeAgentPool {
       const run = job.runId ? nativeRuns.get(job.runId) : undefined;
       const nativeStatus = run?.status;
       if (nativeStatus === 'running') nativeActive += 1;
-      if (job.state === 'pending' || nativeStatus === 'queued') waiting += 1;
+      if ((job.state === 'pending' && !job.admissionBlock) || nativeStatus === 'queued') waiting += 1;
       if (nativeStatus === 'done') completed += 1;
-      if (job.state === 'blocked' || job.state === 'uncertain'
+      if (job.admissionBlock || job.state === 'blocked' || job.state === 'uncertain'
           || nativeStatus === 'failed' || nativeStatus === 'cancelled') blocked += 1;
       return {
         id: job.id,
@@ -139,6 +148,8 @@ export class NativeAgentPool {
         ...(nativeStatus ? { nativeStatus } : {}),
         ...(job.slot ? { slot: job.slot } : {}),
         title: brief(job.task),
+        ...(job.logicalProjectId ? { logicalProjectId: job.logicalProjectId } : {}),
+        ...(job.admissionBlock ? { admissionBlock: job.admissionBlock } : {}),
         ...((job.selectedModel ?? job.model) ? { model: job.selectedModel ?? job.model } : {}),
       };
     });
@@ -183,7 +194,7 @@ export class NativeAgentPool {
         inBatch.add(item.id);
         const old = existing.get(item.id);
         if (old) {
-          if (old.task !== item.task || old.role !== item.role || old.readOnly !== item.readOnly || old.model !== item.model) {
+          if (old.task !== item.task || old.role !== item.role || old.readOnly !== item.readOnly || old.model !== item.model || old.logicalProjectId !== item.logicalProjectId) {
             throw new Error('pool job id conflicts with existing task');
           }
         } else {
@@ -225,6 +236,39 @@ export class NativeAgentPool {
     for (const job of this.state.jobs) {
       if (outstanding >= limit) break;
       if (job.state !== 'pending') continue;
+
+      // A logical owner is NOT the execution checkout: only the project-scoped
+      // RunManager owns that. A newly declared graph-owned job must not launch
+      // under a stale client preview or without a server-side routing gate.
+      // Check before the launch fence, so denial cannot be mistaken for a
+      // partially-started native run on recovery. Keep scanning the queue:
+      // one blocked chain must not starve unrelated ready work.
+      if (job.logicalProjectId) {
+        let denied: Job['admissionBlock'] | undefined;
+        if (!this.ports.admit) {
+          denied = 'graph-admission-unavailable';
+        } else {
+          try {
+            const intention: AgentPoolJobInput = {
+              id: job.id,
+              task: job.task,
+              role: job.role,
+              readOnly: job.readOnly,
+              ...(job.model ? { model: job.model } : {}),
+              logicalProjectId: job.logicalProjectId,
+            };
+            if (!(await this.ports.admit(intention))) denied = 'graph-route-refused';
+          } catch {
+            denied = 'graph-admission-error';
+          }
+        }
+        if (denied) {
+          job.admissionBlock = denied;
+          continue;
+        }
+      }
+      // An earlier transient refusal cannot mask a now-approved launch.
+      delete job.admissionBlock;
       const slot = Array.from({ length: this.state.desired }, (_, i) => i + 1)
         .find((id) => !occupied.has(id));
       if (!slot) break;
