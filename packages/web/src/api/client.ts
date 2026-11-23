@@ -609,6 +609,39 @@ export async function getProjects(opts?: ReadOptions): Promise<ProjectsResponse>
   return unwrap(await cez.api.v1.projects.$get({}, init(opts)), '/projects')
 }
 
+/** Local workspace project graph. Never routed through the active /p/:projectId scope.
+ * The typed Hono client preserves the existing bearer/Basic/session credentials and ApiError policy. */
+export async function getNativeProjectGraph(opts?: ReadOptions) {
+  return unwrap(await cez.api.v1.workspace['project-graph'].$get({}, init(opts)), '/workspace/project-graph')
+}
+
+export async function setNativeProjectFocus(projectId: string | null) {
+  return unwrap(
+    await cez.api.v1.workspace['project-graph'].focus.$put({ json: { projectId } }),
+    '/workspace/project-graph/focus',
+  )
+}
+
+export type NativeProjectLinkInput = {
+  from: string
+  to: string
+  type: 'part-of' | 'built-on' | 'depends-on' | 'provides-feature'
+}
+
+export async function addNativeProjectLink(input: NativeProjectLinkInput) {
+  return unwrap(
+    await cez.api.v1.workspace['project-graph'].links.$post({ json: input }),
+    '/workspace/project-graph/links',
+  )
+}
+
+export async function removeNativeProjectLink(input: NativeProjectLinkInput) {
+  return unwrap(
+    await cez.api.v1.workspace['project-graph'].links.$delete({ json: input }),
+    '/workspace/project-graph/links',
+  )
+}
+
 /** One directory listing for the folder picker (`GET /api/fs/browse`, step 4.1). `path`
  *  omitted means the independently configured browse root, so the dialog never has to know
  *  or duplicate that workspace setting. */
