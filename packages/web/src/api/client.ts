@@ -611,6 +611,14 @@ export async function getProjects(opts?: ReadOptions): Promise<ProjectsResponse>
 
 /** Local workspace project graph. Never routed through the active /p/:projectId scope.
  * The typed Hono client preserves the existing bearer/Basic/session credentials and ApiError policy. */
+/** Advisory parallel waves. Returns reasons for unsafe/unavailable checkouts. */
+export async function getNativeProjectPlan(opts?: ReadOptions) {
+  return unwrap(
+    await cez.api.v1.workspace['project-graph'].plan.$get({}, init(opts)),
+    '/workspace/project-graph/plan',
+  )
+}
+
 export async function getNativeProjectGraph(opts?: ReadOptions) {
   return unwrap(await cez.api.v1.workspace['project-graph'].$get({}, init(opts)), '/workspace/project-graph')
 }
