@@ -4,6 +4,8 @@ import type { ProjectListEntry, NativeProjectLink } from '@open-mercato/cezar-ap
 
 import {
   useNativeProjectGraph,
+  useNativeProjectPlan,
+  useNativeProjectRoutingPreview,
   useNativeProjectLinkMutation,
   useSetNativeProjectFocus,
 } from '@/api/queries'
@@ -38,8 +40,11 @@ export function ProjectLinksEditor({
 }) {
   const [open, setOpen] = useState(false)
   const [target, setTarget] = useState('')
+  const [checkedExecutionId, setCheckedExecutionId] = useState<string | null>(null)
   const [type, setType] = useState<RelationType>('depends-on')
   const graph = useNativeProjectGraph(open)
+  const plan = useNativeProjectPlan(open)
+  const routing = useNativeProjectRoutingPreview()
   const focus = useSetNativeProjectFocus()
   const links = useNativeProjectLinkMutation()
   const peers = projects.filter((entry) => entry.id !== project.id && !entry.unregistered)
@@ -52,13 +57,14 @@ export function ProjectLinksEditor({
   const addLink = () => {
     if (!target || busy) return
     links.mutate({ operation: 'add', link: { from: project.id, to: target, type } }, {
-      onSuccess: () => { setTarget(''); toast('Project relationship saved') },
+      onSuccess: () => { setTarget(''); setCheckedExecutionId(null); toast('Project relationship saved') },
       onError: (error: Error) => toast(error.message),
     })
   }
 
   const removeLink = (link: NativeProjectLink) => {
     if (busy) return
+    setCheckedExecutionId(null)
     links.mutate({ operation: 'remove', link }, {
       onSuccess: () => toast('Project relationship removed'),
       onError: (error: Error) => toast(error.message),
@@ -83,7 +89,7 @@ export function ProjectLinksEditor({
       <PopoverContent
         align="end"
         sideOffset={6}
-        className="w-[min(25rem,calc(100vw-2rem))] p-3"
+        className="max-h-[min(38rem,80vh)] w-[min(25rem,calc(100vw-2rem))] overflow-y-auto p-3"
         data-slot="project-links-editor"
       >
         <div className="flex items-start justify-between gap-3">
@@ -129,7 +135,7 @@ export function ProjectLinksEditor({
               </Select>
               <label htmlFor={`graph-target-${project.id}`} className="mt-2 block text-label font-medium">Target project</label>
               <div className="mt-1 flex gap-2">
-                <Select value={target} onValueChange={setTarget} disabled={busy || unavailable}>
+                <Select value={target} onValueChange={(value) => { setTarget(value); setCheckedExecutionId(null); routing.reset() }} disabled={busy || unavailable}>
                   <SelectTrigger id={`graph-target-${project.id}`}
                     aria-label="Target project" data-slot="graph-target-project"
                     className="min-w-0 flex-1" size="sm">
@@ -177,6 +183,81 @@ export function ProjectLinksEditor({
                   ))}
                 </ul>
               )}
+            </div>
+            <div className="border-t border-border pt-2" data-slot="project-plan-preview">
+              <p className="text-label font-medium">Parallel readiness (preview only)</p>
+              <p className="text-meta text-soft-foreground">
+                Independent repositories remain eligible for planning even when another dependency chain is blocked.
+                No agents are started here.
+              </p>
+              {plan.isPending ? <p className="mt-1 text-label text-soft-foreground">Checking dependencies…</p> : null}
+              {plan.isError ? (
+                <p className="mt-1 text-label text-danger" role="status">Plan unavailable: {plan.error.message}</p>
+              ) : null}
+              {plan.data ? (
+                <>
+                  <p className="mt-1 text-label" data-slot="project-plan-counts">
+                    {plan.data.waves.flat().length} ready in {plan.data.waves.length} wave(s);
+                    {' '}{plan.data.blocked.length} blocked
+                  </p>
+                  <ul className="mt-1 max-h-32 space-y-1 overflow-y-auto text-label" data-slot="project-plan-waves">
+                    {plan.data.waves.map((wave, index) => (
+                      <li key={index}>
+                        <span className="font-medium">Wave {index + 1}:</span> {wave.join(', ')}
+                      </li>
+                    ))}
+                  </ul>
+                  {plan.data.blocked.filter((item) => item.id === project.id).map((item) => (
+                    <p key={item.id} className="mt-2 text-label text-danger" data-slot="project-plan-blocked">
+                      This project is blocked: {item.reason}
+                      {item.blockedBy.length > 0 ? ` (by ${item.blockedBy.join(', ')})` : ''}
+                    </p>
+                  ))}
+                </>
+              ) : null}
+            </div>
+            <div className="border-t border-border pt-2" data-slot="project-routing-preview">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-label font-medium">Execution target check</p>
+                  <p className="text-meta text-soft-foreground">
+                    Verify whether this product can use the target selected above for a future native agent job.
+                    This check never queues work.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  data-action="graph-preview-route"
+                  disabled={!target || busy || routing.isPending}
+                  onClick={() => {
+                    setCheckedExecutionId(target)
+                    routing.mutate({ logicalProjectId: project.id, executionProjectId: target })
+                  }}
+                >
+                  Check
+                </Button>
+              </div>
+              {routing.isPending && checkedExecutionId === target ? (
+                <p className="mt-1 text-label text-soft-foreground">Validating execution checkout…</p>
+              ) : null}
+              {routing.isError && checkedExecutionId === target ? (
+                <p role="alert" className="mt-1 text-label text-danger">
+                  Route check failed: {routing.error.message}
+                </p>
+              ) : null}
+              {routing.data && checkedExecutionId === target ? (
+                <p
+                  role="status"
+                  className={routing.data.eligible ? 'mt-1 text-label text-foreground' : 'mt-1 text-label text-danger'}
+                  data-slot="project-routing-result"
+                >
+                  {routing.data.eligible
+                    ? `Target is eligible for planning: ${routing.data.executionProjectId}. Actual admission still uses Cezar's native pool controls.`
+                    : `Target unavailable: ${routing.data.reason}${routing.data.blockedReason ? ` (${routing.data.blockedReason})` : ''}`}
+                </p>
+              ) : null}
             </div>
             {graph.data.unresolvedLinks.length > 0 ? (
               <p className="text-meta text-soft-foreground">

@@ -52,6 +52,39 @@ external manual edits show up as **orphan** entries for repair.
 `CEZ_SINGLE_PROJECT=1` disables *all* new graph commands, including inspection,
 because listing graph edges would disclose other registered projects.
 
+## Portfolio parallel-readiness preview (R03)
+
+The read-only `GET /api/v1/workspace/project-graph/plan` API computes
+*portfolio-wide* dependency-first execution waves from **registered checkout IDs**
+and status probes. It does NOT start tasks, allocate model accounts, merge PRs,
+mark tasks complete or bypass Cezar's existing concurrency/semaphore/approval gates.
+
+The existing Settings → Projects → Links popover shows how many registered
+repositories are in each parallel-ready wave, and specifically why a selected
+project is blocked. One broken dependency chain does not prevent an unrelated
+repository from being planned.
+
+Safety properties:
+
+- A missing or unprobed checkout is blocked rather than inferred available.
+- A `not-git` root is blocked for Git-based cross-repository execution (though
+  Cezar may still offer its legacy degraded non-Git queue separately).
+- If a manually edited config leaves a link to an unregistered prerequisite,
+  that consumer is blocked, and its dependents inherit the block.
+- A dependency cycle blocks the cyclic component and its dependents; independent
+  acyclic components remain in valid waves.
+- A `provides-feature` edge is provider → consumer and must be reversed for
+  prerequisite ordering. All other edge types use consumer → prerequisite.
+- `CEZ_SINGLE_PROJECT=1` refuses this preview, including reads.
+- The endpoint returns project IDs and dependency reasons, not local filesystem
+  roots, private remote names, environment secrets or worktree identifiers.
+
+`cezar projects waves` remains the strict older global planner which refuses
+any cyclic dependency. The API preview is the safe, **partial** plan for
+supervising a heterogeneous ecosystem; it must never be construed as a dispatch
+authorization or as a guarantee that independent jobs will run concurrently
+within host/provider limits.
+
 ## Public catalog versus native workspace
 
 The GitHub-wide catalog can contain owned forks and repositories that are not
@@ -59,7 +92,33 @@ cloned on this machine. The native graph must NOT interpret catalog names as
 local paths or silently register/clone them. Linking the public/private account
 catalog to the native graph requires an explicit and verified mapping of
 `owner/repo` to local `projectId` (e.g. via the safe parsed `repoUrl` field).
-Until that binding is implemented, each graph is a separate planning layer.
+The read-only `POST /api/v1/workspace/project-graph/catalog-bindings` endpoint
+verifies the catalog against registered checkouts using sanitized origin remotes.
+It reports exact bindings, remote-only repositories and ambiguous local clones,
+but never automatically clones a repo or persists a guessed link.
+
+## Explicit task routing preview (R04)
+
+`POST /api/v1/workspace/project-graph/routing-preview` accepts:
+
+```json
+{"logicalProjectId":"mojum","executionProjectId":"adamantium-node"}
+```
+
+It returns an **advisory** result: whether the requested registered execution
+checkout is within the logical product's graph scope and has no current planner
+blocker. The result gives the native project-scoped pool endpoint only when
+eligible. If a healthy but unrelated repository is selected, routing is refused.
+An unrelated project can still own its own tasks by using its own logical ID.
+
+The API never executes a task or reserves a model slot. A future native pool
+integration must re-check eligibility **at queue admission or launch time**,
+because a preview alone is not an authorization and the graph or checkout may
+change between preview and execution. The product workstream and physical
+execution checkout remain separate identifiers in all cases.
+
+The response returns no filesystem roots, tokens or other host-local secrets.
+`CEZ_SINGLE_PROJECT=1` blocks these cross-project routes at the server.
 
 A focus on Mojum must not prevent parallel work on unrelated registered
 projects. The existing global semaphore, per-project limit and task/review
@@ -67,9 +126,11 @@ gates remain authoritative.
 
 ## Implementation status
 
-- ✅ Native validated graph data, focus, relationship mutation and CLI planning.
-- ✅ Atomic deregistration cleanup and regression tests.
-- ✅ Same-origin HTTP API for reading focus/links and updating links/focus:\n  `GET /api/v1/workspace/project-graph`,\n  `PUT /api/v1/workspace/project-graph/focus`,\n  `POST/DELETE /api/v1/workspace/project-graph/links`.\n- ⏳ Existing project-switcher/settings/Tasks interface integration.
-- ⏳ Remote catalog mapping, automatic capability ownership discovery.
-- ⏳ Agent routing from logical product to explicit execution repository,
-  cross-repo dependency gates and aggregated PR/review state.
+- ✅ Workspace-local graph persistence, focus, links, CLI validation and impact.
+- ✅ Same-origin typed graph API and Settings → Projects relational editor.
+- ✅ Read-only verified mapping from remote GitHub names to registered checkouts.
+- ✅ Read-only waves with explicit blocked reasons, and route preflight (R04).
+- ⏳ The native agent pool does **not yet** re-check graph eligibility before
+  accepting or launching jobs; route preview must not be treated as approval.
+- ⏳ Unified, per-product task/PR rollups and cross-repo admission in the
+  existing Cezar task scheduler (without introducing a second task database).

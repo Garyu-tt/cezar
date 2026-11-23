@@ -17,9 +17,12 @@ import {
 import { PROJECT_ID_RE } from '../workspace/config.ts';
 import { listProjects } from '../workspace/projects.ts';
 import { resolveGitHubCatalog } from '../workspace/project-catalog-bindings.ts';
+import { previewNativeProjectPlan } from '../workspace/project-graph-planner.ts';
+import { previewProjectRouting } from '../workspace/project-graph-routing.ts';
 
 const id = z.string().regex(PROJECT_ID_RE);
 const focusInput = z.object({ projectId: id.nullable() });
+const routePreviewInput = z.object({ logicalProjectId: id, executionProjectId: id }).strict();
 const linkInput = z.object({
   from: id,
   to: id,
@@ -39,6 +42,35 @@ export function createProjectGraphRoutes(singleProject: () => boolean) {
   };
 
   return new Hono()
+    // An advisory check, NOT dispatch authorization. The native project-scoped
+    // agent-pool route still owns actual execution, provider checks and capacity.
+    .post('/workspace/project-graph/routing-preview', async (c) => {
+      if (singleProject()) return c.json(refuses(), 409);
+      const input = routePreviewInput.safeParse(await c.req.json().catch(() => null));
+      if (!input.success) return c.json({ error: 'invalid logical/execution project ID' }, 400);
+      try {
+        const [graph, projects] = await Promise.all([readProjectGraph(), listProjects()]);
+        const plan = previewNativeProjectPlan(graph, projects);
+        return c.json(previewProjectRouting(
+          graph, plan, input.data.logicalProjectId, input.data.executionProjectId,
+        ), 200);
+      } catch (error) {
+        return c.json(failure(error), 500);
+      }
+    })
+    .get('/workspace/project-graph/plan', async (c) => {
+      if (singleProject()) return c.json(refuses(), 409);
+      try {
+        // Read-only view of every registered project; a missing or cyclic
+        // component blocks only its dependents, never unrelated subprojects.
+        return c.json(
+          previewNativeProjectPlan(await readProjectGraph(), await listProjects()),
+          200,
+        );
+      } catch (error) {
+        return c.json(failure(error), 500);
+      }
+    })
     // Pure verification: the caller supplies catalog IDs, the server matches ONLY
     // parsed origin remotes already registered in Cezar. No clone, GitHub API or write.
     .post('/workspace/project-graph/catalog-bindings', async (c) => {

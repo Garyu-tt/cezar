@@ -50,6 +50,8 @@ import {
   getProjectRuns,
   getProjects,
   getNativeProjectGraph,
+  getNativeProjectPlan,
+  previewNativeProjectRouting,
   setNativeProjectFocus,
   addNativeProjectLink,
   removeNativeProjectLink,
@@ -477,6 +479,7 @@ export const workspaceQueryKeys = {
   agentSetup: ['workspace', 'providers', 'setup'] as const,
   projects: ['workspace', 'projects'] as const,
   projectGraph: ['workspace', 'project-graph'] as const,
+  projectPlan: ['workspace', 'project-plan'] as const,
   /** `GET /api/projects/github-owners` — the new-project dialog's owner picker. */
   githubOwners: ['workspace', 'github-owners'] as const,
   /** `POST/GET/DELETE /api/v1/github/login` — the device flow cezar runs for the user. */
@@ -689,6 +692,27 @@ export function useRetryProviderAuth() {
  *  known/unknown answer, the boot slug behind the `/p/default` alias, and the list the
  *  unknown-project screen offers. Step 3.3's sidebar reads it too. */
 /** Workspace-wide registered-repository relationships (not /p/:projectId scoped). */
+/** Advisory read-only plan, shared by all registered repos. */
+/** One-shot server-side, diagnostic-only route check; does not enqueue an agent. */
+export function useNativeProjectRoutingPreview() {
+  return useMutation({
+    mutationFn: ({ logicalProjectId, executionProjectId }: {
+      logicalProjectId: string
+      executionProjectId: string
+    }) => previewNativeProjectRouting(logicalProjectId, executionProjectId),
+    retry: false,
+  })
+}
+
+export function useNativeProjectPlan(enabled = true) {
+  return useQuery({
+    queryKey: workspaceQueryKeys.projectPlan,
+    queryFn: ({ signal }) => getNativeProjectPlan({ signal }),
+    enabled,
+    retry: false,
+  })
+}
+
 export function useNativeProjectGraph(enabled = true) {
   return useQuery({
     queryKey: workspaceQueryKeys.projectGraph,
@@ -703,7 +727,10 @@ export function useSetNativeProjectFocus() {
   return useMutation({
     mutationFn: (projectId: string | null) => setNativeProjectFocus(projectId),
     retry: false,
-    onSuccess: (graph) => client.setQueryData<NativeProjectGraph>(workspaceQueryKeys.projectGraph, graph),
+    onSuccess: (graph) => {
+      client.setQueryData<NativeProjectGraph>(workspaceQueryKeys.projectGraph, graph)
+      void client.invalidateQueries({ queryKey: workspaceQueryKeys.projectPlan })
+    },
   })
 }
 
@@ -713,7 +740,10 @@ export function useNativeProjectLinkMutation() {
     mutationFn: ({ operation, link }: { operation: 'add' | 'remove'; link: NativeProjectLinkInput }) =>
       operation === 'add' ? addNativeProjectLink(link) : removeNativeProjectLink(link),
     retry: false,
-    onSuccess: (graph) => client.setQueryData<NativeProjectGraph>(workspaceQueryKeys.projectGraph, graph),
+    onSuccess: (graph) => {
+      client.setQueryData<NativeProjectGraph>(workspaceQueryKeys.projectGraph, graph)
+      void client.invalidateQueries({ queryKey: workspaceQueryKeys.projectPlan })
+    },
   })
 }
 
@@ -791,6 +821,7 @@ export function useRemoveProject() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.projects })
       void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.projectGraph })
+      void queryClient.invalidateQueries({ queryKey: workspaceQueryKeys.projectPlan })
     },
   })
 }
