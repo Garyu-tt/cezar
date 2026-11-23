@@ -26,6 +26,19 @@ beforeEach(() => {
     const result = (payload: unknown, status = 200) =>
       new Response(JSON.stringify(payload), { status, headers: { 'content-type': 'application/json' } })
     if (path === '/api/v1/workspace/project-graph' && method === 'GET') return result(graph)
+    if (path === '/api/v1/workspace/project-graph/plan' && method === 'GET') {
+      const dependencies = graph.links.some((link) => link.from === 'mojum' && link.to === 'adamantiumtoolbox')
+      return result({
+        focusProjectId: graph.focusProjectId,
+        focusScope: ['mojum'],
+        waves: dependencies
+          ? [['adamantium-node', 'adamantiumtoolbox'], ['mojum']]
+          : [['adamantium-node', 'adamantiumtoolbox', 'mojum']],
+        blocked: [],
+        unresolvedLinks: [],
+        previewOnly: true,
+      })
+    }
     if (path === '/api/v1/workspace/project-graph/focus' && method === 'PUT') {
       graph = { ...graph, focusProjectId: body?.projectId as string, explicitFocusProjectId: body?.projectId as string }
       return result(graph)
@@ -82,6 +95,13 @@ describe('existing row project graph popover', () => {
       }))).toBe(true))
     await waitFor(() => expect(document.querySelector('[data-slot="project-links-editor"] li')?.textContent)
       .toContain('part-of'))
+  })
+
+  it('shows advisory parallel waves without starting a task or a checkout', async () => {
+    showEditor()
+    expect(await screen.findByText(/3 ready in 1 wave/)).not.toBeNull()
+    expect(screen.getByText(/Wave 1:/)).not.toBeNull()
+    expect(requests.filter((item) => item.url.includes('/runs') || item.url.includes('/checkout'))).toEqual([])
   })
 
   it('refuses to invent a local execution project for remote/unregistered targets', async () => {
