@@ -19,7 +19,8 @@ async function harness(cap = 17) {
     launch: (task: string, readOnly: boolean, _model?: string) => {
       if (failLaunch) throw new Error('provider unavailable');
       const id = 'native-' + (runs.length + 1);
-      runs.push({ id, task, status: 'running' });
+      const active = runs.filter((run) => run.status === 'running').length;
+      runs.push({ id, task, status: active < resourceLimit ? 'running' : 'queued' });
       launched.push({ id, task, readOnly });
       return id;
     },
@@ -53,8 +54,9 @@ describe('native dynamic agent pool', () => {
     const scaled = await h.pool.scale(17);
     expect(scaled.desired).toBe(17);
     expect(scaled.resourceCap).toBe(5);
-    expect(h.launched).toHaveLength(5);
+    expect(h.launched).toHaveLength(17);
     expect(scaled.nativeActive).toBe(5);
+    expect(scaled.waiting).toBe(15); // 12 native-queued + 3 not yet admitted
     expect(h.launched[0]?.task).toContain('[Agent 1/17');
     expect(h.launched[0]?.task).toContain(nativePoolMarker('issue-100'));
     expect(h.launched[1]?.readOnly).toBe(true);
@@ -190,13 +192,21 @@ describe('native dynamic agent pool', () => {
     const h = await harness(2);
     await h.pool.enqueue(jobs(17));
     await h.pool.scale(17);
-    expect(h.launched).toHaveLength(2);
+    // The native Cezar scheduler queues all 17 records immediately.
+    // Only 2 execute while the resource limit is 2; no phantom model calls.
+    expect(h.launched).toHaveLength(17);
+    expect(h.pool.status().nativeActive).toBe(2);
+    expect(h.pool.status().waiting).toBe(15);
     h.setCapacity(10);
+    for (const run of h.runs.slice(2, 10)) run.status = 'running';
     await h.pool.tick();
-    expect(h.launched).toHaveLength(10);
+    expect(h.launched).toHaveLength(17); // already queued natively
+    expect(h.pool.status().nativeActive).toBe(10);
     h.setCapacity(17);
+    for (const run of h.runs) run.status = 'running';
     await h.pool.tick();
     expect(h.launched).toHaveLength(17);
+    expect(h.pool.status().nativeActive).toBe(17);
     expect(h.pool.status().resourceCap).toBe(17);
   });
 });
