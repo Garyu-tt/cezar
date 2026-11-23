@@ -317,7 +317,7 @@ describe('workspace config', () => {
       schemaVersion: 'two',
       browseRoot: 42,
       projectsDir: 42,
-      resources: { maxParallel: 99, maxMonitoringSessions: 99, idleTimeoutMinutes: 9999, monitoringWakeIntervalMinutes: 0, memoryLimitMb: 'lots', worktreeRetentionDefault: -1 },
+      resources: { maxParallel: 999, maxMonitoringSessions: 99, idleTimeoutMinutes: 9999, monitoringWakeIntervalMinutes: 0, memoryLimitMb: 'lots', worktreeRetentionDefault: -1 },
       projects: [project('good')],
     });
     const config = await loadWorkspaceConfig();
@@ -403,7 +403,7 @@ describe('workspace config', () => {
     write({
       projects: [
         { ...project('capped'), maxParallel: 1 }, // valid override
-        { ...project('too-big'), maxParallel: 999 }, // out of range → inherit (undefined)
+        { ...project('too-big'), maxParallel: 9999 }, // out of range → inherit (undefined)
         project('inherits'), // no key → inherit (undefined)
       ],
     });

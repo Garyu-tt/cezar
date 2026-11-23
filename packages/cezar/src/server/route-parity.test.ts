@@ -241,7 +241,7 @@ describe('project-route alias parity (unprefixed vs /api/v1/p/<boot> vs /api/v1/
     // 400: invalid bodies never mutate, so parity can hit them repeatedly.
     await expectParity('/runs', json('POST', {}));
     await expectParity('/ui-state', json('PUT', 'nonsense'));
-    await expectParity('/config', json('PUT', { maxParallel: 99 }));
+    await expectParity('/config', json('PUT', { maxParallel: 999 }));
     await expectParity('/agent-config/no-such-file', json('PUT', { content: '{}', version: null }));
     await expectParity('/workflows/parse', json('POST', { yaml: '' }));
     // 404: unknown ids.
