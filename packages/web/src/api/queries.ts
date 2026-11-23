@@ -51,6 +51,7 @@ import {
   getProjects,
   getNativeProjectGraph,
   getNativeProjectPlan,
+  previewNativeProjectRouting,
   setNativeProjectFocus,
   addNativeProjectLink,
   removeNativeProjectLink,
@@ -692,6 +693,17 @@ export function useRetryProviderAuth() {
  *  unknown-project screen offers. Step 3.3's sidebar reads it too. */
 /** Workspace-wide registered-repository relationships (not /p/:projectId scoped). */
 /** Advisory read-only plan, shared by all registered repos. */
+/** One-shot server-side, diagnostic-only route check; does not enqueue an agent. */
+export function useNativeProjectRoutingPreview() {
+  return useMutation({
+    mutationFn: ({ logicalProjectId, executionProjectId }: {
+      logicalProjectId: string
+      executionProjectId: string
+    }) => previewNativeProjectRouting(logicalProjectId, executionProjectId),
+    retry: false,
+  })
+}
+
 export function useNativeProjectPlan(enabled = true) {
   return useQuery({
     queryKey: workspaceQueryKeys.projectPlan,
