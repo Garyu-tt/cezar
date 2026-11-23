@@ -10,6 +10,18 @@ import {
   shouldRegisterProject,
 } from './projects.ts';
 import { track } from '../telemetry.ts';
+import {
+  PROJECT_RELATION_TYPES,
+  focusRegisteredProject,
+  linkRegisteredProjects,
+  projectDependencies,
+  projectExecutionWaves,
+  projectFocusScope,
+  projectImpact,
+  readProjectGraph,
+  unlinkRegisteredProjects,
+  type ProjectRelationType,
+} from './project-graph.ts';
 
 /**
  * `cezar projects` (spec 2026-07-20-multi-project-workspace, step 5.2) — the
@@ -38,6 +50,13 @@ const USAGE = `usage:
   cezar projects remove <id>   drop a registry entry (the repo is untouched)
   cezar projects tag <id> [<tag>…]
                                set the grouping tags of a project (none clears them)
+  cezar projects focus [<id>]  choose active product; omit id to clear the selection
+  cezar projects graph [<id>]  show all links and the focused project's scope
+  cezar projects link <from> <to> <type>
+  cezar projects unlink <from> <to> <type>
+  cezar projects impact <id>  find projects affected by changes to a repository
+  cezar projects waves        plan independent repository batches (no execution)
+                               types: part-of, built-on, depends-on, provides-feature
 
   add/remove/tag are unavailable when CEZ_SINGLE_PROJECT=1`;
 
@@ -79,6 +98,19 @@ export async function runProjectsCommand(
         return 1;
       }
       return tagCommand(rest[0], rest.slice(1), io);
+    case 'focus':
+    case 'graph':
+    case 'link':
+    case 'unlink':
+    case 'impact':
+    case 'waves':
+      // Hide the graph as well as blocking writes in CEZ_SINGLE_PROJECT: its
+      // other repo IDs are not part of the constrained workspace.
+      if (singleProject) {
+        io.error(SINGLE_PROJECT_EDIT_ERROR);
+        return 1;
+      }
+      return projectGraphCommand(sub, rest, io);
     default:
       io.error(`unknown projects subcommand: ${sub}\n`);
       io.error(USAGE);
@@ -210,4 +242,57 @@ async function tagCommand(
       : `  = ${id}  [${normalized.join(' ')}]`,
   );
   return 0;
+}
+
+
+/** Graph operations share the same validated, atomic workspace registry as 'projects add'. */
+async function projectGraphCommand(
+  command: 'focus' | 'graph' | 'link' | 'unlink' | 'impact' | 'waves',
+  args: string[],
+  io: ProjectsCommandIo,
+): Promise<number> {
+  try {
+    if (command === 'focus') {
+      if (args.length > 1) { io.error(USAGE); return 1; }
+      await focusRegisteredProject(args[0] ?? null);
+      io.log(args[0] ? `  focus: ${args[0]}` : '  focus: automatic');
+      return 0;
+    }
+    if (command === 'link' || command === 'unlink') {
+      const [from, to, type] = args;
+      if (args.length !== 3 || !from || !to || !PROJECT_RELATION_TYPES.includes(type as ProjectRelationType)) {
+        io.error(USAGE);
+        return 1;
+      }
+      if (command === 'link') await linkRegisteredProjects(from, to, type as ProjectRelationType);
+      else await unlinkRegisteredProjects(from, to, type as ProjectRelationType);
+      io.log(`  ${command === 'link' ? '+' : '-'} ${from} --${type}--> ${to}`);
+      return 0;
+    }
+    const graph = await readProjectGraph();
+    if (command === 'graph') {
+      const focus = args[0] ?? graph.focusProjectId;
+      const scope = focus === null ? [] : projectFocusScope(graph, focus);
+      io.log(`  focus: ${graph.focusProjectId ?? '(none)'}`);
+      io.log(`  projects: ${graph.projectIds.length} / linked: ${graph.links.length}`);
+      io.log(`  scope: ${scope.join(', ') || '(none)'}`);
+      for (const link of graph.links) io.log(`  ${link.from} --${link.type}--> ${link.to}`);
+      for (const link of graph.unresolvedLinks) io.log(`  ! orphan: ${link.from} --${link.type}--> ${link.to}`);
+      return 0;
+    }
+    if (command === 'impact') {
+      if (!args[0] || args.length !== 1) { io.error(USAGE); return 1; }
+      io.log(`  ${args[0]} affects: ${projectImpact(graph, args[0]).join(', ') || '(none)'}`);
+      return 0;
+    }
+    if (command === 'waves') {
+      if (args.length !== 0) { io.error(USAGE); return 1; }
+      projectExecutionWaves(graph).forEach((wave, i) => io.log(`  wave ${i + 1}: ${wave.join(', ')}`));
+      return 0;
+    }
+    return 1;
+  } catch (error) {
+    io.error(`project graph: ${error instanceof Error ? error.message : String(error)}`);
+    return 1;
+  }
 }
