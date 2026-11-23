@@ -308,3 +308,24 @@ export const launchKeyResponseSchema = z.object({
   key: z.string(),
 });
 export type LaunchKeyResponse = z.infer<typeof launchKeyResponseSchema>;
+
+/**
+ * Native graph over REGISTERED local Cezar project IDs (not remote GitHub names).
+ * Edges are child/consumer -> prerequisite except provides-feature: provider -> consumer.
+ */
+export const nativeProjectLinkTypeSchema = z.enum(['part-of', 'built-on', 'depends-on', 'provides-feature']);
+export const nativeProjectLinkSchema = z.object({
+  from: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
+  to: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
+  type: nativeProjectLinkTypeSchema,
+});
+export type NativeProjectLink = z.infer<typeof nativeProjectLinkSchema>;
+
+export const nativeProjectGraphSchema = z.object({
+  focusProjectId: z.string().nullable(),
+  explicitFocusProjectId: z.string().nullable(),
+  projectIds: z.array(z.string()),
+  links: z.array(nativeProjectLinkSchema),
+  unresolvedLinks: z.array(nativeProjectLinkSchema),
+});
+export type NativeProjectGraph = z.infer<typeof nativeProjectGraphSchema>;
