@@ -1,11 +1,11 @@
 import { closestCenter, DndContext } from '@dnd-kit/core'
 import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { CheckIcon, ChevronDownIcon, FolderIcon, FolderPlusIcon, GripVerticalIcon, LoaderCircleIcon, PlusIcon } from 'lucide-react'
+import { CheckIcon, ChevronDownIcon, FolderIcon, FolderPlusIcon, GripVerticalIcon, LoaderCircleIcon, PlusIcon, StarIcon } from 'lucide-react'
 import * as React from 'react'
 import { useNavigate } from 'react-router'
 
-import { useRunsIndex } from '@/api/queries'
+import { useNativeProjectGraph, useRunsIndex } from '@/api/queries'
 import type { ProjectListEntry, RunIndexEntry } from '@open-mercato/cezar-api-client'
 import { AddProjectDialog } from '@/components/add-project-dialog'
 import { CloneProjectDialog } from '@/components/clone-project-dialog'
@@ -106,6 +106,8 @@ export function ProjectSwitcher({
   const sidebarNavigate = useSidebarNavigate()
   const navigateOut = onNavigate ?? sidebarNavigate
   const [open, setOpen] = React.useState(false)
+  const graph = useNativeProjectGraph(open && !singleProject)
+  const focusId = graph.data?.explicitFocusProjectId ?? null
   const [query, setQuery] = React.useState('')
   const navigate = useNavigate()
   const arrangement = useProjectArrangement(projects)
@@ -214,6 +216,7 @@ export function ProjectSwitcher({
                       section={section}
                       searching={query.trim() !== ''}
                       activeId={activeId}
+                      focusId={focusId}
                       counts={counts}
                       sortable={sortable}
                       onSelect={select}
@@ -303,6 +306,7 @@ function SwitcherSection({
   section,
   searching,
   activeId,
+  focusId,
   counts,
   sortable,
   onSelect,
@@ -311,6 +315,7 @@ function SwitcherSection({
   section: ProjectSection
   searching: boolean
   activeId: string | null
+  focusId: string | null
   counts: Map<string, ProjectCounts>
   sortable: boolean
   onSelect: (project: ProjectListEntry) => void
@@ -375,6 +380,7 @@ function SwitcherSection({
             key={project.id}
             project={project}
             current={project.id === activeId}
+            isFocus={project.id === focusId}
             counts={counts.get(project.id)}
             sortable={sortable && !searching}
             onSelect={onSelect}
@@ -388,12 +394,14 @@ function SwitcherSection({
 function SwitcherRow({
   project,
   current,
+  isFocus,
   counts,
   sortable,
   onSelect,
 }: {
   project: ProjectListEntry
   current: boolean
+  isFocus: boolean
   counts: ProjectCounts | undefined
   sortable: boolean
   onSelect: (project: ProjectListEntry) => void
@@ -442,6 +450,11 @@ function SwitcherRow({
         <StatusDot tone={projectStatusTone(project.status)} />
         <span className={cn('flex min-w-0 flex-1 items-baseline gap-2', missing && 'opacity-55')}>
           <span data-slot="switcher-project-name" className="truncate font-medium">{project.name}</span>
+          {isFocus ? (
+            <span data-slot="switcher-focus-project" aria-label="Focus project" title="Primary product focus" className="shrink-0 text-violet">
+              <StarIcon className="size-3" aria-hidden="true" />
+            </span>
+          ) : null}
           {project.branch ? (
             <span data-slot="switcher-project-branch" className="truncate font-mono text-micro text-soft-foreground">{project.branch}</span>
           ) : null}
