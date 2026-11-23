@@ -15,6 +15,7 @@ let graph: NativeProjectGraph
 let requests: Array<{ method: string; url: string; body?: unknown }>
 
 beforeEach(() => {
+  Element.prototype.scrollIntoView = vi.fn() // Radix Select in jsdom
   graph = { focusProjectId: 'adamantium-node', explicitFocusProjectId: null,
     projectIds: projects.map((p) => p.id), links: [], unresolvedLinks: [] }
   requests = []
@@ -61,6 +62,7 @@ describe('existing row project graph popover', () => {
   it('uses workspace API to persist focus while keeping navigation independent', async () => {
     showEditor()
     const focus = await screen.findByRole('button', { name: 'Focus' })
+    await waitFor(() => expect(focus.hasAttribute('disabled')).toBe(false))
     fireEvent.click(focus)
     await waitFor(() => expect(requests).toContainEqual({
       url: '/api/v1/workspace/project-graph/focus',
@@ -70,10 +72,12 @@ describe('existing row project graph popover', () => {
 
   it('creates typed links to registered projects and renders the same graph cache', async () => {
     showEditor()
-    const target = await screen.findByLabelText('Target project')
-    fireEvent.change(target, { target: { value: 'adamantiumtoolbox' } })
-    const relation = screen.getByLabelText('Relationship')
-    fireEvent.change(relation, { target: { value: 'part-of' } })
+    const target = await screen.findByRole('combobox', { name: 'Target project' })
+    fireEvent.keyDown(target, { key: 'ArrowDown', code: 'ArrowDown' })
+    fireEvent.click(await screen.findByRole('option', { name: /adamantiumtoolbox/ }))
+    const relation = screen.getByRole('combobox', { name: 'Relationship' })
+    fireEvent.keyDown(relation, { key: 'ArrowDown', code: 'ArrowDown' })
+    fireEvent.click(await screen.findByRole('option', { name: 'Part of (child → parent)' }))
     fireEvent.click(screen.getByRole('button', { name: /^Link$/ }))
     await waitFor(() => expect(requests.some((item) =>
       item.method === 'POST' && item.url === '/api/v1/workspace/project-graph/links' &&
@@ -86,9 +90,11 @@ describe('existing row project graph popover', () => {
 
   it('refuses to invent a local execution project for remote/unregistered targets', async () => {
     showEditor()
-    const target = await screen.findByLabelText('Target project') as HTMLSelectElement
-    expect([...target.options].map((option) => option.value)).toEqual([
-      '', 'adamantiumtoolbox', 'adamantium-node',
+    const target = await screen.findByRole('combobox', { name: 'Target project' })
+    fireEvent.keyDown(target, { key: 'ArrowDown', code: 'ArrowDown' })
+    expect((await screen.findAllByRole('option')).map((option) => option.textContent)).toEqual([
+      'adamantiumtoolbox (adamantiumtoolbox)',
+      'adamantium-node (adamantium-node)',
     ])
     expect(requests.filter((item) => item.method !== 'GET')).toEqual([])
   })
