@@ -373,6 +373,7 @@ import {
   type ProjectListEntry,
 } from '../workspace/projects.ts';
 import { WorkspaceSemaphore } from '../workspace/semaphore.ts';
+import { createProjectGraphRoutes } from './project-graph-api.ts';
 import {
   candidateKey,
   FallbackPolicyBusyError,
@@ -9579,6 +9580,7 @@ export function createApp(deps: ServerDeps) {
     .route('/', providersRoutes)
     .route('/', agentSetupFamily)
     .route('/', projectsRoutes)
+    .route('/', createProjectGraphRoutes(() => capabilities().singleProject))
     .route('/', agentProfilesRoutes)
     .route('/', skillsUpdateRoutes)
     .route('/', selfUpdateRoutes)
