@@ -2,8 +2,8 @@
 
 Cezar already runs separate repositories in one cockpit. This feature branch adds the **first,
 non-destructive planning layer** for an entire GitHub account. It does **not** yet dispatch cross-repo
-tasks or change the cockpit. See `.ai/specs/2026-11-23-hierarchical-multirepo-projects.md`
-in the companion specification PR for the complete implementation.
+tasks or change the cockpit. See [companion specification PR #1](https://github.com/Garyu-tt/cezar/pull/1)
+for the complete proposed implementation (the specification is not yet merged into `main`).
 
 ## What is managed
 
