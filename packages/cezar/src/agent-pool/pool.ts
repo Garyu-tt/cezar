@@ -18,12 +18,14 @@ import {
  */
 const storedJob = agentPoolJobInputSchema.extend({
   state: z.enum(['pending', 'launching', 'launched', 'uncertain', 'blocked']),
+  selectedModel: z.string().optional(),
   runId: z.string().optional(),
   slot: z.number().int().positive().optional(),
 });
 const storedState = z.object({
   schema: z.literal('cezar.agent-pool.v1'),
   desired: z.number().int().min(0).max(500),
+  models: z.array(z.string().min(3).max(200)).max(64).default([]),
   jobs: z.array(storedJob).max(5_000),
 });
 type State = z.infer<typeof storedState>;
@@ -37,7 +39,7 @@ export interface NativePoolRun {
 export interface AgentPoolPorts {
   dataDir: string;
   /** Existing native RunManager, not a separate inference worker. */
-  launch: (task: string, readOnly: boolean) => string | Promise<string>;
+  launch: (task: string, readOnly: boolean, model?: string) => string | Promise<string>;
   listRuns: () => NativePoolRun[];
   /** Existing Cezar workspace semaphore, refreshed when resource settings change. */
   capacity: () => number;
@@ -55,7 +57,7 @@ function brief(task: string): string {
 
 export class NativeAgentPool {
   private readonly path: string;
-  private state: State = { schema: 'cezar.agent-pool.v1', desired: 0, jobs: [] };
+  private state: State = { schema: 'cezar.agent-pool.v1', desired: 0, models: [], jobs: [] };
   private chain: Promise<void> = Promise.resolve();
 
   private constructor(private readonly ports: AgentPoolPorts) {
@@ -137,10 +139,12 @@ export class NativeAgentPool {
         ...(nativeStatus ? { nativeStatus } : {}),
         ...(job.slot ? { slot: job.slot } : {}),
         title: brief(job.task),
+        ...((job.selectedModel ?? job.model) ? { model: job.selectedModel ?? job.model } : {}),
       };
     });
     return {
       desired: this.state.desired,
+      models: this.state.models,
       resourceCap: this.capacity(),
       nativeActive,
       waiting,
@@ -150,10 +154,17 @@ export class NativeAgentPool {
     };
   }
 
-  scale(desired: number): Promise<AgentPoolStatus> {
+  scale(desired: number, models?: string[] | null): Promise<AgentPoolStatus> {
     return this.serial(async () => {
       if (!Number.isSafeInteger(desired) || desired < 0 || desired > 500) throw new RangeError('desired must be 0..500');
       this.state.desired = desired;
+      if (models !== undefined) {
+        if (models !== null && (models.length < 1 || models.length > 64 || models.some(m =>
+          typeof m !== 'string' || m.length < 3 || m.length > 200))) {
+          throw new RangeError('invalid weighted model list');
+        }
+        this.state.models = models ?? [];
+      }
       await this.save();
       await this.pumpUnsafe();
       return this.status();
@@ -172,7 +183,7 @@ export class NativeAgentPool {
         inBatch.add(item.id);
         const old = existing.get(item.id);
         if (old) {
-          if (old.task !== item.task || old.role !== item.role || old.readOnly !== item.readOnly) {
+          if (old.task !== item.task || old.role !== item.role || old.readOnly !== item.readOnly || old.model !== item.model) {
             throw new Error('pool job id conflicts with existing task');
           }
         } else {
@@ -216,13 +227,14 @@ export class NativeAgentPool {
         .find((id) => !occupied.has(id));
       if (!slot) break;
       job.slot = slot;
+      job.selectedModel = job.model ?? (this.state.models.length ? this.state.models[(slot - 1) % this.state.models.length] : undefined);
       job.state = 'launching';
       // Fenced first: a crash after launch cannot silently start a duplicate.
       await this.save();
       try {
         const nativeTask = nativePoolMarker(job.id) + '[Agent ' + slot + '/' + this.state.desired
           + ' · ' + job.role.toUpperCase() + '] ' + job.task;
-        const runId = await this.ports.launch(nativeTask, job.readOnly);
+        const runId = await this.ports.launch(nativeTask, job.readOnly, job.selectedModel);
         job.runId = runId;
         job.state = 'launched';
       } catch (error) {
@@ -231,6 +243,7 @@ export class NativeAgentPool {
           // must not burn or duplicate this job. Resume on the next tick.
           job.state = 'pending';
           job.slot = undefined;
+          job.selectedModel = undefined;
           await this.save();
           break;
         }

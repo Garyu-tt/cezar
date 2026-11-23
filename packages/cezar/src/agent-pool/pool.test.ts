@@ -16,7 +16,7 @@ async function harness(cap = 17) {
     dataDir: dir,
     listRuns: () => runs,
     capacity: () => resourceLimit,
-    launch: (task: string, readOnly: boolean) => {
+    launch: (task: string, readOnly: boolean, _model?: string) => {
       if (failLaunch) throw new Error('provider unavailable');
       const id = 'native-' + (runs.length + 1);
       runs.push({ id, task, status: 'running' });
@@ -159,6 +159,31 @@ describe('native dynamic agent pool', () => {
     accessible = true;
     await h.pool.tick();
     expect(h.launched).toHaveLength(1);
+  });
+
+  it('routes 17 native Cezar tasks across weighted operator-selected models, with manual overrides', async () => {
+    const h = await harness(17);
+    const selected: Array<string | undefined> = [];
+    const old = h.ports.launch;
+    h.ports.launch = (task, readOnly, model) => {
+      selected.push(model);
+      return old(task, readOnly);
+    };
+    const work = jobs(17).map(job => ({ ...job, model: undefined as string | undefined }));
+    work[2]!.model = 'local/override';
+    await h.pool.enqueue(work);
+    const view = await h.pool.scale(17, ['local/a', 'local/a', 'local/b', 'local/c']);
+    expect(view.nativeActive).toBe(17);
+    expect(view.models).toEqual(['local/a', 'local/a', 'local/b', 'local/c']);
+    expect(selected).toHaveLength(17);
+    expect(selected[0]).toBe('local/a');
+    expect(selected[1]).toBe('local/a');
+    expect(selected[2]).toBe('local/override');
+    expect(selected[3]).toBe('local/c');
+    expect(selected[4]).toBe('local/a');
+    expect(view.jobs[2]?.model).toBe('local/override');
+    await h.pool.scale(0, null);
+    expect(h.pool.status().models).toEqual([]);
   });
 
   it('observes Cezar resource cap changes without a restart', async () => {

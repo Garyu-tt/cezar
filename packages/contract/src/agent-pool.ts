@@ -3,6 +3,8 @@ import { z } from 'zod';
 /** Native Cezar pool. Logical target is independent of physical provider capacity. */
 export const agentPoolSetInputSchema = z.object({
   desired: z.number().int().min(0).max(500),
+  /** Ordered weighted model IDs (duplicates express slot weight); null clears. */
+  models: z.array(z.string().trim().min(3).max(200)).min(1).max(64).nullable().optional(),
 }).strict();
 export type AgentPoolSetInput = z.infer<typeof agentPoolSetInputSchema>;
 
@@ -11,6 +13,8 @@ export const agentPoolJobInputSchema = z.object({
   task: z.string().trim().min(20).max(20_000),
   role: z.enum(['build', 'test', 'review', 'integration']).default('build'),
   readOnly: z.boolean().default(false),
+  /** Optional native Cezar runner model selector, never bypasses a lock. */
+  model: z.string().trim().min(3).max(200).optional(),
 }).strict();
 export type AgentPoolJobInput = z.infer<typeof agentPoolJobInputSchema>;
 
@@ -27,9 +31,11 @@ export const agentPoolJobStatusSchema = z.object({
   nativeStatus: z.string().optional(),
   slot: z.number().int().optional(),
   title: z.string(),
+  model: z.string().optional(),
 });
 export const agentPoolStatusSchema = z.object({
   desired: z.number().int(),
+  models: z.array(z.string()),
   resourceCap: z.number().int(),
   nativeActive: z.number().int(),
   waiting: z.number().int(),

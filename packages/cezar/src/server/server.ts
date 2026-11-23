@@ -5340,8 +5340,11 @@ export function createApp(deps: ServerDeps) {
         id: r.id, task: r.task, status: r.status,
       })),
       capacity: () => deps.semaphore?.projectMaxParallel(project.root) ?? 2,
-      launch: async (task, readOnly) => {
+      launch: async (task, readOnly, model) => {
         // Preserve the same provider/account availability gate as POST /runs.
+        if (model && agentModelsLocked(project.root)) {
+          throw new AgentPoolPreflightUnavailable('Model override is locked by operator');
+        }
         const fallback = (await loadConfig(project.root)).defaultRunner;
         const denied = await providerActionError(
           providersRequiredByWorkflow(QUICK_TASK_WORKFLOW, fallback),
@@ -5351,6 +5354,7 @@ export function createApp(deps: ServerDeps) {
         return project.manager.startRun(QUICK_TASK_WORKFLOW, {
           task,
           readOnly,
+          ...(model ? { model } : {}),
           autonomous: !readOnly,
           generateFollowups: false,
         }).id;
@@ -5391,7 +5395,7 @@ export function createApp(deps: ServerDeps) {
     .put('/agent-pool', jsonZodValidator(agentPoolSetInputSchema), async (c) => {
       try {
         const pool = await poolFor(c.get('project'));
-        const status = await pool.scale(c.req.valid('json').desired);
+        const status = await pool.scale(c.req.valid('json').desired, c.req.valid('json').models);
         return c.json(agentPoolStatusSchema.parse(status));
       } catch {
         return c.json({ error: 'Agent pool configuration could not be saved' }, 409);

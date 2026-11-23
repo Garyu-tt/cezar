@@ -28,6 +28,17 @@ with different content is rejected. The total private backlog is limited to
 an existing Cezar workflow or its Automation engine; there is no second model
 gateway, HTTP server, browser widget or persistent agent process.
 
+Weighted model routing (explicit opt-in): PUT /agent-pool may also supply
+a models array of 1..64 native runner model IDs, for example:
+{"desired":17,"models":["provider/a","provider/a","provider/b"]}.
+Each new agent is assigned the element at (slot-1) modulo the list length,
+so repeating a model ID weights capacity. Jobs may name an explicit model
+that overrides the slot preference. Passing models:null removes the weights.
+If Cezar's operator model lock is enabled, such model-specific jobs stay
+pending with no silently substituted model. No public API request bypasses
+the lock. A weighted list is admission *policy*, not evidence of physical
+capacity; the operator must verify each provider's live queue and tokens/sec.
+
 The queue lives in the normal project data directory as private
 `agent-pool-v1.json`. Native Cezar run records remain the *authoritative*
 source for whether a run is queued, running, waiting, accepted or failed.
